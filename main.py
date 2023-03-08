@@ -7,52 +7,53 @@ import minmax
 import response
 
 # INITIALIZE SCENARIO
-sim_length = 96 * 7 * 52  # Length of simulation (96 ptu's per day and 7 days)
+# Length of simulation (96 ptu's per day and 7 days, 1 ptu = 15 minutes)
+sim_length = 96 * 7 * 52
 number_of_houses = 100
 
 
 # INITIALIZE DATA
+# this creates the list of houses object and arranges all the earlier loaded data correctly
 [list_of_houses, ren_share, temperature_data] = data_initialization.initialize(
     sim_length, number_of_houses
-)  # this creates the list of houses object and arranges all the earlier loaded data correctly
-total_load = np.zeros(
-    sim_length
-)  # array to store the total combined load of all households for each timestep
+)
+
+# array to store the total combined load of all households for each timestep
+total_load = np.zeros(sim_length)
 
 
 if __name__ == "__main__":
     print("start simulation")
     for i in range(0, sim_length):
-        minmax.limit_ders(
-            list_of_houses, i, temperature_data[i]
-        )  # determine the min and max power consumption of each DER during this timestep
+        # determine the min and max power consumption of each DER during this timestep
+        minmax.limit_ders(list_of_houses, i, temperature_data[i])
 
-        for (
-            house
-        ) in list_of_houses:  # now we determine the actual consumption of each DER
-            house.pv.consumption[i] = house.pv.minmax[
-                1
-            ]  # The PV wil always generate maximum power
-            house.ev.consumption[i] = house.ev.minmax[
-                1
-            ]  # The EV will, if connected, always charge with maximum power
-            house.hp.consumption[i] = house.hp.minmax[
-                0
-            ]  # The HP will keep the household temperature constant
+        for house in list_of_houses:
+            # now we determine the actual consumption of each DER
+            # The PV wil always generate maximum power
+            house.pv.consumption[i] = house.pv.minmax[1]
+
+            # The EV will, if connected, always charge with maximum power
+            house.ev.consumption[i] = house.ev.minmax[1]
+
+            # The HP will keep the household temperature constant
+            house.hp.consumption[i] = house.hp.minmax[0]
+
             house_load = (
                 house.base_data[i]
                 + house.pv.consumption[i]
                 + house.ev.consumption[i]
                 + house.hp.consumption[i]
             )
-            if house_load <= 0:  # if the combined load is negative, charge the battery
+            # if the combined load is negative, charge the battery
+            if house_load <= 0:
                 house.batt.consumption[i] = min(-house_load, house.batt.minmax[1])
-            else:  # always immediately discharge the battery
+            else:
+                # always immediately discharge the battery if the load is positive
                 house.batt.consumption[i] = max(-house_load, house.batt.minmax[0])
 
-        total_load[i] = response.response(
-            list_of_houses, i, temperature_data[i]
-        )  # Response and update DERs for the determined power consumption
+        # Response and update DERs for the determined power consumption
+        total_load[i] = response.response(list_of_houses, i, temperature_data[i])
     print("finished simulation")
 
 reference_load = np.load("reference_load.npy")  # load the reference profile
