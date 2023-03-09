@@ -1,9 +1,24 @@
 import numpy as np
+import logging
+
+import constants as c
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 heat_capacity_water = 4182  # [J/kg.K]
 
 
-def limit_ev(house, i):
+def limit_ev(house, i: int, v2g: bool):
+    """
+    This function limits the EV charging power based on the EV session and the
+    battery state of charge.
+
+    :param house: house object
+    :param i: timestep
+    :param v2g: boolean to determine if V2G is enabled
+    :return: None
+    """
     # vehicle not home, so minmax = [0,0]
     if house.ev.session[i] == -1:
         house.ev.minmax = [0, 0]
@@ -33,6 +48,7 @@ def limit_ev(house, i):
         max_power = min(house.ev.power_max, energy_left * 4)
 
         # store value in house
+        # logger.debug(f"EV minmax: {min_power}, {max_power}")
         house.ev.minmax = [min_power, max_power]
 
 
@@ -106,7 +122,7 @@ def limit_ders(list_of_houses, i, T_ambient):
 
         # ev
         if house.ders[1] == 1:
-            limit_ev(house, i)
+            limit_ev(house, i, c.v2g)
 
         # batt
         if house.ders[2] == 1:

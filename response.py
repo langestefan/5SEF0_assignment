@@ -1,10 +1,23 @@
 import numpy as np
+import logging
+
+logger = logging.getLogger(__name__)
 
 heat_capacity_water = 4182  # [J/kg.K]
 
 
-def response(list_of_houses, i, T_ambient):
+def response(list_of_houses: list, i: int, T_ambient: float):
+    """
+    This function is called every timestep and updates the DERs given the
+    determined consumption.
+
+    :param list_of_houses: list of houses
+    :param i: timestep
+    :param T_ambient: ambient temperature
+    :return: Total load of all houses
+    """
     total_load = 0
+
     for house in list_of_houses:
         # Base load and PV are already updated in the main
         # EV
@@ -30,7 +43,7 @@ def response(list_of_houses, i, T_ambient):
             if (0 > np.round(house.ev.energy, 4)) or (
                 np.round(house.ev.energy, 4) > house.ev.size
             ):
-                print("battery too empty/full: ", i)
+                logger.error(f'Battery too empty/full: {i}')
 
         # HP
         if house.ders[3] == 1:

@@ -40,10 +40,10 @@ handler.setFormatter(formatter)
 # INITIALIZE SCENARIO
 # Length of simulation (96 ptu's per day and 7 days, 1 ptu = 15 minutes)
 sim_length = 96 * 7 * 52
-number_of_houses = 2
+number_of_houses = 100
 
 
-# INITIALIZE DATA
+# (1) INITIALIZE DATA
 # this creates the list of houses object and arranges all the earlier loaded data correctly
 [list_of_houses, ren_share, temperature_data] = data_initialization.initialize(
     sim_length, number_of_houses
@@ -58,11 +58,11 @@ if __name__ == "__main__":
     t_start = time.time()
 
     for i in range(0, sim_length):
-        # determine the min and max power consumption of each DER during this timestep
+        # (2) determine the min and max power consumption of each DER during this timestep
         minmax.limit_ders(list_of_houses, i, temperature_data[i])
 
         for house in list_of_houses:
-            # now we determine the actual consumption of each DER
+            # (3) now we determine the actual consumption of each DER
             # The PV wil always generate maximum power
             house.pv.consumption[i] = house.pv.minmax[1]
 
@@ -85,7 +85,7 @@ if __name__ == "__main__":
                 # always immediately discharge the battery if the load is positive
                 house.batt.consumption[i] = max(-house_load, house.batt.minmax[0])
 
-        # Response and update DERs for the determined power consumption
+        # (4) Response and update DERs for the determined power consumption
         total_load[i] = response.response(list_of_houses, i, temperature_data[i])
 
     logger.info(f"Finished simulation in {round(time.time() - t_start)} seconds")
