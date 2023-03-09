@@ -59,7 +59,7 @@ def limit_batt(house):
 
     # max charging power (either what is left to fully charge battery or max charge power), this value is positive
     charge_power = min((house.batt.size - house.batt.energy) * 4, house.batt.power_max)
-    house.batt.minmax[0:2] = [dis_power, charge_power]
+    house.batt.minmax = [dis_power, charge_power]
 
 
 def limit_hp(house, i, T_ambient):

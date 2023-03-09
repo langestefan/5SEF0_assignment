@@ -60,7 +60,7 @@ class house:
     class batt:
         def __init__(self, sim_length):
             # Based on Tesla Powerwall https://www.tesla.com/sites/default/files/pdfs/powerwall/Powerwall_2_AC_Datasheet_EN_NA.pdf
-            self.minmax = [0, 0, 0]
+            self.minmax = [0, 0]
             self.consumption = np.zeros(sim_length)
             self.afrr = np.zeros(sim_length)
 
