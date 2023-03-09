@@ -1,15 +1,46 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import logging
+import time
+import os
 
 # import required .py files
 import data_initialization
 import minmax
 import response
 
+# set the logging level to INFO
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+# create a logging format
+logging.basicConfig(
+    format=("[%(asctime)s] %(levelname)s [%(name)s:%(lineno)s] %(message)s"),
+)
+
+# create a file handler
+current_time = time.strftime("%Y%m%d-%H%M%S")
+sim_path = os.path.join("sims", current_time)
+if not os.path.exists(sim_path):
+    os.makedirs(sim_path)
+
+
+log_location = os.path.join(sim_path, "sim" + ".log")
+
+handler = logging.FileHandler(log_location)
+handler.setLevel(logging.DEBUG)
+logger.addHandler(handler)
+
+# add formatter to handler
+formatter = logging.Formatter(
+    "[%(asctime)s] %(levelname)s [%(name)s:%(lineno)s] %(message)s"
+)
+handler.setFormatter(formatter)
+
 # INITIALIZE SCENARIO
 # Length of simulation (96 ptu's per day and 7 days, 1 ptu = 15 minutes)
 sim_length = 96 * 7 * 52
-number_of_houses = 100
+number_of_houses = 2
 
 
 # INITIALIZE DATA
@@ -23,7 +54,9 @@ total_load = np.zeros(sim_length)
 
 
 if __name__ == "__main__":
-    print("start simulation")
+    logger.info("Starting simulation")
+    t_start = time.time()
+
     for i in range(0, sim_length):
         # determine the min and max power consumption of each DER during this timestep
         minmax.limit_ders(list_of_houses, i, temperature_data[i])
@@ -54,12 +87,18 @@ if __name__ == "__main__":
 
         # Response and update DERs for the determined power consumption
         total_load[i] = response.response(list_of_houses, i, temperature_data[i])
-    print("finished simulation")
+
+    logger.info(f"Finished simulation in {round(time.time() - t_start)} seconds")
 
 reference_load = np.load("reference_load.npy")  # load the reference profile
 
 
-def plot_grid():
+def plot_grid(show: bool = False):
+    """
+    Plot the total load and the daily power profile of the simulation and the reference profile
+
+    :param show: If True, the plots will be shown. The plots will always be saved to the sim folder.
+    """
     plt.title("Total Load Neighborhood")
     plt.plot(reference_load, label="Reference")
     plt.plot(total_load, label="Simulation")
@@ -67,7 +106,9 @@ def plot_grid():
     plt.ylabel("Kilowatt [kW]")
     plt.legend()
     plt.grid(True)
-    plt.show()
+    plt.savefig(os.path.join(sim_path, "total_load.png"), dpi=300)
+    if show:
+        plt.show()
 
     plt.figure()
     power_split = np.split(total_load, sim_length / 96)
@@ -85,7 +126,9 @@ def plot_grid():
     plt.ylabel("Relative Power [-]")
     plt.legend()
     plt.grid(True)
-    plt.show()
+    plt.savefig(os.path.join(sim_path, "daily_power_profile.png"), dpi=300)
+    if show:
+        plt.show()
 
 
 def renewables():
@@ -94,11 +137,12 @@ def renewables():
     renewable_import = sum(total_load[total_load > 0] * ren_share[total_load > 0]) / 4
     renewable_percentage = renewable_import / energy_import * 100
 
-    print("Energy Exported: ", energy_export)
-    print("Energy Imported: ", energy_import)
-    print("Renewable Share:", renewable_percentage)
+    # log the results
+    logger.info(f"Energy Exported: {energy_export}")
+    logger.info(f"Energy Imported: {energy_import}")
+    logger.info(f"Renewable Share: {renewable_percentage}")
 
 
+# display results
 plot_grid()
-
 renewables()

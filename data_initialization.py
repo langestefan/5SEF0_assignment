@@ -43,20 +43,19 @@ class house:
             self.power_max = ev_data["charge_cap"]  # kW
             self.size = ev_data["max_SoC"]  # kWh
             self.min_charge = ev_data["min_charge"]
-            self.energy = ev_data[
-                "start_SoC"
-            ]  # energy in kWh in de battery, changes each timstep
-            self.energy_history = np.zeros(
-                sim_length
-            )  # array to store previous battery state of charge for analyzing later
-            self.session = ev_data[
-                "EV_status"
-            ]  # details of the location of the EV (-1 is not at home, other number indicates the session number)
-            self.session_trip_energy = ev_data[
-                "Trip_Energy"
-            ]  # energy required during session
-            self.session_arrive = ev_data["T_arrival"]  # arrival times of session
-            self.session_leave = ev_data["T_leave"]  # leave times of session
+
+            # energy in kWh in de battery, changes each timstep
+            self.energy = ev_data["start_SoC"]
+            # array to store previous battery state of charge for analyzing later
+            self.energy_history = np.zeros(sim_length)
+            # details of the location of the EV (-1 is not at home, other number indicates the session number)
+            self.session = ev_data["EV_status"]
+            # energy required during session
+            self.session_trip_energy = ev_data["Trip_Energy"]
+            # arrival times of session
+            self.session_arrive = ev_data["T_arrival"]
+            # leave times of session
+            self.session_leave = ev_data["T_leave"]
 
     class batt:
         def __init__(self, sim_length):
@@ -67,34 +66,31 @@ class house:
 
             self.power_max = 5  # kW
             self.size = 13.5  # kWh
-            self.energy = 6.25  # energy in kWh in de battery at every moment in time
+            # energy in kWh in de battery at every moment in time
+            self.energy = 6.25
             self.energy_history = np.zeros(sim_length)
 
     class hp:
         def __init__(self, sim_length):
             # building properties
-            self.nominal_power = (
-                8000  # [W]       Nominal capacity of heat pump installation
-            )
-            self.minimal_relative_load = (
-                0.3  # [-]       Minimal operational capacity for heat pump to run
-            )
+            # Nominal capacity of heat pump installation
+            self.nominal_power = 8000  # [W]
+            # Minimal operational capacity for heat pump to run
+            self.minimal_relative_load = 0.3  # [-]
 
             # house tank properties
-            self.house_tank_mass = (
-                120  # [kg]      Mass of buffer = Volume of buffer (Water)
-            )
-            self.house_tank_T_min_limit = (
-                25  # [deg C]   Min temperature in the buffer tank
-            )
-            self.house_tank_T_max_limit = (
-                75  # [deg C]   Min temperature in the buffer tank
-            )
-            self.house_tank_T_set = 40  # [deg C]   Temperature setpoint in buffer tank
-            self.house_tank_T_init = 40  # [deg C]   Initial temperature in buffer tank
-            self.house_tank_T = (
-                self.house_tank_T_init
-            )  # Parameter initialized with initial temperature but changes over time
+            # Mass of buffer = Volume of buffer (Water)
+            self.house_tank_mass = 120  # [kg]
+            # Min temperature in the buffer tank
+            self.house_tank_T_min_limit = 25  # [deg C]
+            # Min temperature in the buffer tank
+            self.house_tank_T_max_limit = 75  # [deg C]
+            # Temperature setpoint in buffer tank
+            self.house_tank_T_set = 40  # [deg C]
+            # Initial temperature in buffer tank
+            self.house_tank_T_init = 40  # [deg C]
+            # Parameter initialized with initial temperature but changes over time
+            self.house_tank_T = self.house_tank_T_init
 
             self.minmax = [0, 0]
             self.consumption = np.zeros(sim_length)
