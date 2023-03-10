@@ -31,6 +31,7 @@ def response(list_of_houses: list, i: int, T_ambient: float):
                         int(house.ev.session[i - 1])
                     ]
                     if house.ev.energy <= 0:
+                        logger.error(f"EV energy below 0: {i}")
                         house.ev.energy = 0
 
             # save EV SoC for later analysis
@@ -43,7 +44,7 @@ def response(list_of_houses: list, i: int, T_ambient: float):
             if (0 > np.round(house.ev.energy, 4)) or (
                 np.round(house.ev.energy, 4) > house.ev.size
             ):
-                logger.error(f'Battery too empty/full: {i}')
+                logger.error(f"Battery too empty/full: {i}")
 
         # HP
         if house.ders[3] == 1:

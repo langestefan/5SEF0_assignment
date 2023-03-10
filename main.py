@@ -8,34 +8,19 @@ import os
 import data_initialization
 import minmax
 import response
+import constants as c
 
 # set the logging level to INFO
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(c.LOG_LEVEL_MAIN)
+logger.addHandler(c.handler)
 
 # create a logging format
 logging.basicConfig(
     format=("[%(asctime)s] %(levelname)s [%(name)s:%(lineno)s] %(message)s"),
 )
 
-# create a file handler
-current_time = time.strftime("%Y%m%d-%H%M%S")
-sim_path = os.path.join("sims", current_time)
-if not os.path.exists(sim_path):
-    os.makedirs(sim_path)
 
-
-log_location = os.path.join(sim_path, "sim" + ".log")
-
-handler = logging.FileHandler(log_location)
-handler.setLevel(logging.DEBUG)
-logger.addHandler(handler)
-
-# add formatter to handler
-formatter = logging.Formatter(
-    "[%(asctime)s] %(levelname)s [%(name)s:%(lineno)s] %(message)s"
-)
-handler.setFormatter(formatter)
 
 # INITIALIZE SCENARIO
 # Length of simulation (96 ptu's per day and 7 days, 1 ptu = 15 minutes)
