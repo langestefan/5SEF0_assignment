@@ -78,7 +78,7 @@ if __name__ == "__main__":
 reference_load = np.load("reference_load.npy")  # load the reference profile
 
 
-def plot_grid(show: bool = False):
+def plot_grid(show: bool = False, path: str = c.sim_path):
     """
     Plot the total load and the daily power profile of the simulation and the reference profile
 
@@ -91,7 +91,7 @@ def plot_grid(show: bool = False):
     plt.ylabel("Kilowatt [kW]")
     plt.legend()
     plt.grid(True)
-    plt.savefig(os.path.join(sim_path, "total_load.png"), dpi=300)
+    plt.savefig(os.path.join(path, "total_load.png"), dpi=300)
     if show:
         plt.show()
 
@@ -111,7 +111,7 @@ def plot_grid(show: bool = False):
     plt.ylabel("Relative Power [-]")
     plt.legend()
     plt.grid(True)
-    plt.savefig(os.path.join(sim_path, "daily_power_profile.png"), dpi=300)
+    plt.savefig(os.path.join(path, "daily_power_profile.png"), dpi=300)
     if show:
         plt.show()
 

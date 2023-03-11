@@ -1,7 +1,11 @@
 import numpy as np
 import logging
 
+import constants as c
+
 logger = logging.getLogger(__name__)
+logger.setLevel(c.LOG_LEVEL_MINMAX)
+logger.addHandler(c.handler)
 
 heat_capacity_water = 4182  # [J/kg.K]
 
@@ -31,7 +35,7 @@ def response(list_of_houses: list, i: int, T_ambient: float):
                         int(house.ev.session[i - 1])
                     ]
                     if house.ev.energy <= 0:
-                        logger.error(f"EV energy below 0: {i}")
+                        logger.error(f"EV energy below 0: {i} by amount: {house.ev.energy} kWh for house: {house.id}")
                         house.ev.energy = 0
 
             # save EV SoC for later analysis
@@ -44,7 +48,7 @@ def response(list_of_houses: list, i: int, T_ambient: float):
             if (0 > np.round(house.ev.energy, 4)) or (
                 np.round(house.ev.energy, 4) > house.ev.size
             ):
-                logger.error(f"Battery too empty/full: {i}")
+                logger.error(f"Battery too empty/full: {i} by amount: {house.ev.energy - house.ev.size} kWh for house: {house.id}")
 
         # HP
         if house.ders[3] == 1:

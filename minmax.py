@@ -31,78 +31,61 @@ def determine_v2g_limits(i: int, house: house):
     )
     current_energy = house.ev.energy  # energy at current SOC
     energy_left = max_energy - house.ev.energy  # energy delta to 100% SOC
-    delta_energy = required_energy - current_energy
+    delta_energy = required_energy - np.floor(current_energy)
     charging_ptu = (ptu_in_day > c.ev_charge_session[0]) and (
         ptu_in_day < c.ev_charge_session[1]
     )
 
     # check for errors
     if current_energy > max_energy:
-        logger.error(f'Current energy > max energy: {current_energy} > {max_energy}')
+        logger.error(f'Current energy > max energy: {current_energy} > {max_energy} (index: {i}, house: {house.id}')
     if required_energy > max_energy:
-        logger.error(f'Required energy > max energy: {required_energy} > {max_energy}')
+        logger.error(f'Required energy > max energy: {required_energy} > {max_energy} (index: {i}, house: {house.id}')
     if energy_left < 0:
         logger.error(f'Energy left < 0: {energy_left} < 0')
+    # if current_energy < c.R_SAFETY * max_energy:
+    #     logger.error(f'Current energy < safety energy: {current_energy} < {c.R_SAFETY * max_energy} (index: {i}, house: {house.id}')
 
     logger.debug(
         f"Current energy: {round(current_energy)}, required energy: {round(required_energy)}, "
-        f"delta energy: {round(delta_energy)}, charging_ptu: {charging_ptu}"
+        f"delta energy: {round(delta_energy)}, charging_ptu: {charging_ptu}  (index: {i}, house: {house.id})"
     )
 
     # charging ptu
+    # TODO: look 2 cycles ahead in case our EV is not home long enough to charge
     if charging_ptu:
         # delta energy is positive, we need to charge the EV
-        if delta_energy > 0:
+        if delta_energy >= -1:
             logger.debug(f"Delta energy = {delta_energy}, charging EV")
-            min_power = min(house.ev.power_max, (required_energy / time_left))
+            min_power = min(house.ev.power_max, (required_energy / time_left) * 4)
             max_power = min(house.ev.power_max, energy_left * 4)
 
         # delta energy is negative, we can discharge the EV
         # TODO: discharging is not required when there is no power deficit
         else:
-            logger.debug(f"Delta energy = {delta_energy}, discharging EV")
+            logger.debug(f"Delta energy = {delta_energy}, discharging EV (index: {i}, house: {house.id})")
             min_power = 0
-            max_power = max(-house.ev.power_max, (delta_energy * 4 / time_left))
+            max_power = max(-house.ev.power_max, (delta_energy / time_left) * 4)
 
     # discharging ptu
     else:
-        min_power = 0
-        max_power = min(house.ev.power_max, energy_left * 4)
+        # we have to charge the EV to make sure it is sufficiently charged for the next session
+        # we hope to enter this situation as least as possible...
+        if delta_energy >= -1:
+
+            # in a discharging ptu it does not make sense to charge only the little bit of required
+            # energy for the entire time the house is home. So we just charge at full power for at least the next ptu
+            min_power = min(house.ev.power_max, (required_energy / time_left) * 4)
+            max_power = min(house.ev.power_max, energy_left * 4)
+            logger.debug(f"Did not charge EV enough, charging EV (index: {i}, house: {house.id} at {min_power} - {max_power} kW")
+
+        # we can discharge the EV
+        else:
+            min_power = 0
+            max_power = max(-house.ev.power_max, (delta_energy / time_left) * 4)
+            logger.debug(f"Discharging EV (index: {i}, house: {house.id}) at {min_power} - {max_power} kW")
 
     return [min_power, max_power]
-
-    # # we are in a ptu where the EV can be charged
-    # if charging_ptu:
-    #     # if the EV is sufficiently charged
-    #     if current_energy >= required_energy:
-    #         if current_energy >= c.R_SAFETY * max_energy:
-    #             min_power = 0  # no discharge
-    #             max_power = max(-house.ev.power_max, (delta_energy / time_left))
-    #         else:
-    #             # get to
-    #             min_power = 0
-    #     else:
-    #         # min power by dividing the required power by the number of timesteps left
-    #         # max power is either what is left to fully charge the battery or the max charging capability
-    #         min_power = min(house.ev.power_max, (required_energy / time_left))
-    #         max_power = min(house.ev.power_max, energy_left * 4)
-
-    # # we are in a ptu where the EV can be discharged
-    # else:
-    #     # if the EV SOC is below the required SOC, we must charge the EV regardless of the PTU we are in
-    #     # note that we do not expect (or like) this to happen at any point
-    #     if current_energy <= required_energy:
-    #         min_power = min(house.ev.power_max, (required_energy / time_left))
-    #         max_power = min(house.ev.power_max, energy_left * 4)
-
-    #     # if the EV SOC is above the required SOC, we can discharge the EV to the required SOC
-    #     else:
-    #         assert delta_energy < 0, "Delta energy should be negative"
-    #         # we assume that max EV discharge power is equal to max EV charge power
-    #         min_power = max(-house.ev.power_max, 0)
-    #         max_power = max(-house.ev.power_max, (delta_energy / time_left))
-
-    # return [min_power, max_power]
 
 
 def limit_ev(house, i: int, v2g: bool):
