@@ -1,8 +1,12 @@
 import numpy as np
 import pickle
+import logging
 
 import constants as c
 
+logger = logging.getLogger(__name__)
+logger.setLevel(c.LOG_LEVEL_DATAINIT)
+logger.addHandler(c.handler)
 
 class House:
     def __init__(self, sim_length, id, baseload, pv_data, ev_data, hp_data):
@@ -126,6 +130,14 @@ def initialize(sim_length, number_of_houses):
     hp_data = scenario_data["hp_data"]
     temperature_data = hp_data["ambient_temp"]
     ren_share = scenario_data["ren_share"]
+
+    # load day ahead prices
+    f_dh = open("day_ahead_2020.pkl", "rb")
+    day_ahead_prices = pickle.load(f_dh)
+    day_ahead_prices = day_ahead_prices["Day-ahead Price [EUR/MWh]"]
+
+    logger.debug(f'Shape of day ahead prices: {day_ahead_prices.shape}')
+    logger.debug(f'Shape of pv_data data: {pv_data.shape}')
 
     # determine distribution of data
     distribution = np.arange(number_of_houses)
