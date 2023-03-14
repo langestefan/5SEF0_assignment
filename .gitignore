@@ -136,3 +136,7 @@ data.pkl
 
 # simulation results
 sims/
+
+# day ahead prices
+day_ahead_*
+Day-ahead*
