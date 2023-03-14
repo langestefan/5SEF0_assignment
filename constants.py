@@ -15,9 +15,9 @@ off_peak_wd = [4 * wd_start, int(4 * wd_end)]  # @ workday
 off_peak_we = [4 * 0, 4 * 24]  # @ weekend
 
 # LOGGING settings
-LOG_LEVEL_MAIN = logging.DEBUG
-LOG_LEVEL_MINMAX = logging.DEBUG
-LOG_LEVEL_DATAINIT = logging.DEBUG
+LOG_LEVEL_MAIN = logging.INFO
+LOG_LEVEL_MINMAX = logging.INFO
+LOG_LEVEL_DATAINIT = logging.INFO
 
 current_time = time.strftime("%Y%m%d-%H%M%S")
 sim_path = os.path.join("sims", current_time)

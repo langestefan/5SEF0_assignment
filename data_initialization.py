@@ -133,11 +133,7 @@ def initialize(sim_length, number_of_houses):
 
     # load day ahead prices
     f_dh = open("day_ahead_2020.pkl", "rb")
-    day_ahead_prices = pickle.load(f_dh)
-    day_ahead_prices = day_ahead_prices["Day-ahead Price [EUR/MWh]"]
-
-    logger.debug(f'Shape of day ahead prices: {day_ahead_prices.shape}')
-    logger.debug(f'Shape of pv_data data: {pv_data.shape}')
+    day_ahead_prices = pickle.load(f_dh)["Day-ahead Price [EUR/MWh]"].values
 
     # determine distribution of data
     distribution = np.arange(number_of_houses)
@@ -157,4 +153,4 @@ def initialize(sim_length, number_of_houses):
             )
         )
 
-    return [list_of_houses, ren_share, temperature_data]
+    return [list_of_houses, ren_share, temperature_data, day_ahead_prices]

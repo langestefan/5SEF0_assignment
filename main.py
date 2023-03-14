@@ -29,7 +29,7 @@ number_of_houses = 100
 
 # (1) INITIALIZE DATA
 # this creates the list of houses object and arranges all the earlier loaded data correctly
-[list_of_houses, ren_share, temperature_data] = data_initialization.initialize(
+[list_of_houses, ren_share, temperature_data, day_ahead_prices] = data_initialization.initialize(
     sim_length, number_of_houses
 )
 
@@ -61,6 +61,10 @@ if __name__ == "__main__":
     for i in range(0, sim_length):
         # (2) determine the min and max power consumption of each DER during this timestep
         minmax.limit_ders(list_of_houses, i, temperature_data[i])
+
+        # get day-ahead price for this timestep
+        day_ahead_price = day_ahead_prices[i]
+        logger.debug(f"Day-ahead price: {day_ahead_price} (EUR/MWh)")
 
         for house in list_of_houses:
             logger.debug(
