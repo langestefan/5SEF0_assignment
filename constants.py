@@ -4,15 +4,19 @@ import time
 
 
 # v2g = True:  EV can be charged and discharged
-v2g = True
+v2g = False
+v2h = True
 
-# ptu's of the day [0-95] when the EV can be charged
+# off-peak ptu's of the day
 # 0 = 00:00-00:15, ..., 95 = 23:45-00:00
-ev_charge_session = [4 * 5, 4 * 17]  # 5:00-17:00
+wd_start = 0
+wd_end = 15
+off_peak_wd = [4 * wd_start, int(4 * wd_end)]  # @ workday
+off_peak_we = [4 * 0, 4 * 24]  # @ weekend
 
 # LOGGING settings
-LOG_LEVEL_MAIN = logging.INFO
-LOG_LEVEL_MINMAX = logging.INFO
+LOG_LEVEL_MAIN = logging.DEBUG
+LOG_LEVEL_MINMAX = logging.DEBUG
 
 current_time = time.strftime("%Y%m%d-%H%M%S")
 sim_path = os.path.join("sims", current_time)
@@ -31,3 +35,4 @@ handler.setFormatter(formatter)
 
 # range safety constant (% of battery size)
 R_SAFETY = 0.2
+P_MAX_CHARGE = 0.2

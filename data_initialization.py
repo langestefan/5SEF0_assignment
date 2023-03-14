@@ -1,8 +1,10 @@
 import numpy as np
 import pickle
 
+import constants as c
 
-class house:
+
+class House:
     def __init__(self, sim_length, id, baseload, pv_data, ev_data, hp_data):
         # General House Parameters
         self.id = id + 1  # give each household an ID
@@ -56,6 +58,11 @@ class house:
             self.session_arrive = ev_data["T_arrival"]
             # leave times of session
             self.session_leave = ev_data["T_leave"]
+
+            # v2g / v2h: for now use same setting for all EVs
+            self.v2g = c.v2g
+            self.v2h = c.v2h
+            self.discharge = False
 
     class batt:
         def __init__(self, sim_length):
@@ -128,7 +135,7 @@ def initialize(sim_length, number_of_houses):
     list_of_houses = []
     for nmb in range(number_of_houses):
         list_of_houses.append(
-            house(
+            House(
                 sim_length,
                 nmb,
                 baseloads[distribution[nmb]],

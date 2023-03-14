@@ -21,7 +21,6 @@ logging.basicConfig(
 )
 
 
-
 # INITIALIZE SCENARIO
 # Length of simulation (96 ptu's per day and 7 days, 1 ptu = 15 minutes)
 sim_length = 96 * 7 * 52
@@ -38,6 +37,23 @@ number_of_houses = 100
 total_load = np.zeros(sim_length)
 
 
+def off_peak_ptu(i: int):
+    """
+    Determine whether we are in a charging PTU or not
+
+    :param i: timestep
+    :return: boolean, True if we are in a charging PTU
+    """
+    # determine if we are in a workday or weekend
+    ptu_in_day = i % 96
+    weekday = (i // 96) % 7
+    weekend = weekday > 4  # days 5 and 6 are weekend
+
+    # determine if we are in a off-peak PTU depending on the day of the week/ptu in the day
+    charge_session = c.off_peak_we if weekend else c.off_peak_wd
+    return (ptu_in_day >= charge_session[0]) and (ptu_in_day < charge_session[1])
+
+
 if __name__ == "__main__":
     logger.info("Starting simulation")
     t_start = time.time()
@@ -47,27 +63,53 @@ if __name__ == "__main__":
         minmax.limit_ders(list_of_houses, i, temperature_data[i])
 
         for house in list_of_houses:
+            logger.debug(
+                f" --- House: {house.id} at timestep: {i} (off-peak: {off_peak_ptu(i)}, time[HH:MM]: {i%96*15//60:02}:{i%96*15%60:02}), weekday: {i//96%7} --- "
+            )
             # (3) now we determine the actual consumption of each DER
             # The PV wil always generate maximum power
             house.pv.consumption[i] = house.pv.minmax[1]
 
-            # The EV will, if connected, always charge with maximum power
-            house.ev.consumption[i] = house.ev.minmax[1]
-
             # The HP will keep the household temperature constant
             house.hp.consumption[i] = house.hp.minmax[0]
 
-            house_load = (
-                house.base_data[i]
-                + house.pv.consumption[i]
-                + house.ev.consumption[i]
-                + house.hp.consumption[i]
+            house_base_load = (
+                house.base_data[i] + house.pv.consumption[i] + house.hp.consumption[i]
             )
-            # if the combined load is negative, charge the battery
-            if house_load <= 0:
-                house.batt.consumption[i] = min(-house_load, house.batt.minmax[1])
+
+            # EV
+            v2h = house.ev.v2h
+            v2g = house.ev.v2g
+
+            # we are in an off-peak PTU
+            if off_peak_ptu(i):
+                logger.debug("Off-peak PTU")
+
+                # in an off-peak PTU we always maximally charge the EV
+                house.ev.discharge = False
+                house.ev.consumption[i] = house.ev.minmax[1]
+
+            # we are in peak PTU
             else:
-                # always immediately discharge the battery if the load is positive
+                logger.debug("On-peak PTU")
+                house.ev.discharge = True
+                # max charge up to required SOC
+                # or if we are already above this level, we can use V2H
+                if house_base_load > 0:
+                    house.ev.consumption[i] = max(
+                        house.ev.minmax[0], -house_base_load
+                    )
+            
+            # calculate the total load of the household
+            house_load = house_base_load + house.ev.consumption[i]
+            logger.debug(f"EV load: {house.ev.consumption[i]}")
+            logger.debug(f"Base load: {house_base_load}")
+
+            # TODO: move this to off_peak_ptu section
+            if house_load <= 0:  # if the combined load is negative, charge the battery
+                logger.debug(f'Charging battery with: {round(house_load,2)}')
+                house.batt.consumption[i] = min(-house_load, house.batt.minmax[1])
+            else:  # always immediately discharge the battery
                 house.batt.consumption[i] = max(-house_load, house.batt.minmax[0])
 
         # (4) Response and update DERs for the determined power consumption
