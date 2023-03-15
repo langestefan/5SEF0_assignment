@@ -17,9 +17,9 @@ logger.addHandler(c.handler)
 
 # create a logging format
 logging.basicConfig(
-    format=("[%(asctime)s] %(levelname)s [%(name)s:%(lineno)s] %(message)s"),
+    format=("[%(asctime)s.%(msecs)03d] %(levelname)s [%(name)s:%(lineno)s] %(message)s"),
+    datefmt='%H:%M:%S'
 )
-
 
 # INITIALIZE SCENARIO
 # Length of simulation (96 ptu's per day and 7 days, 1 ptu = 15 minutes)
@@ -136,7 +136,7 @@ if __name__ == "__main__":
             p_min = house.ev.minmax[0]
             p_max = house.ev.minmax[1]
             p_scalar = minmax_price_range[i % 96]
-            p_ev = p_min + p_max * p_scalar
+            p_ev = p_min + (p_max - p_min) * p_scalar
 
             # if we use v2h we can discharge the EV
             if v2h:
@@ -156,12 +156,12 @@ if __name__ == "__main__":
             if house_load <= 0:  # if the combined load is negative, charge the battery
                 house.batt.consumption[i] = min(-house_load, house.batt.minmax[1])
                 logger.debug(
-                    f"House {house.id} is charging the battery with {house.batt.consumption[i]:.2f} kW"
+                    f"House {house.id} is charging the EV battery with {house.batt.consumption[i]:.2f} kW"
                 )
             else:  # always immediately discharge the battery
                 house.batt.consumption[i] = max(-house_load, house.batt.minmax[0])
                 logger.debug(
-                    f"House {house.id} is discharging the battery with {house.batt.consumption[i]:.2f} kW"
+                    f"House {house.id} is discharging the EV battery with {house.batt.consumption[i]:.2f} kW"
                 )
 
         # (4) Response and update DERs for the determined power consumption

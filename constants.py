@@ -5,7 +5,7 @@ import time
 
 # v2g = True:  EV can be charged and discharged
 v2g = False
-v2h = True
+v2h = False
 
 # off-peak ptu's of the day
 # 0 = 00:00-00:15, ..., 95 = 23:45-00:00
