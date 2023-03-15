@@ -133,6 +133,7 @@ data.pkl
 
 # VSCode
 .vscode/
+*.code-workspace
 
 # simulation results
 sims/
