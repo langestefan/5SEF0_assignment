@@ -50,8 +50,13 @@ def response(list_of_houses: list, i: int, T_ambient: float):
             if (0 > np.round(house.ev.energy, 4)) or (
                 np.round(house.ev.energy, 4) > house.ev.size
             ):
+                delta = round(house.ev.energy - house.ev.size, 3)
+                if delta > 0:
+                    str = "full"
+                else:
+                    str = "empty"
                 logger.error(
-                    f"EV battery too empty/full: {i} by amount: {round(house.ev.energy - house.ev.size,3)} kWh for house: {house.id}"
+                    f"EV battery too {str}: idx: {i} by amount: {delta} kWh for house: {house.id}"
                 )
 
         # HP

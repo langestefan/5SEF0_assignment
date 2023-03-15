@@ -12,7 +12,7 @@ logger.addHandler(c.handler)
 heat_capacity_water = 4182  # [J/kg.K]
 
 
-def determine_v2hg_limits(house: House, i: int, discharge: bool = False):
+def determine_v2hg_limits(house: House, i: int):
     """
     This function determines the min and max power for V2H/G.
 
@@ -23,7 +23,6 @@ def determine_v2hg_limits(house: House, i: int, discharge: bool = False):
 
     :param house: house object
     :param i: timestep
-    :param discharge: boolean, True if we are allowed to discharge
     :return: min_power, max_power
     """
     # energy left to charge battery to max = 100% SOC - current SOC
