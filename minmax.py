@@ -35,30 +35,48 @@ def determine_v2hg_limits(house: House, i: int, discharge: bool = False):
     session = int(house.ev.session[i])
     time_left = house.ev.session_leave[session] - i
 
-    # determine min and max power
-    ev_power_max = c.P_MAX_CHARGE * house.ev.power_max
+    # maximum charging power
+    ev_power_max = house.ev.power_max
+
+    # calculate energy quantities
     trip_energy = ceil(house.ev.session_trip_energy[session])
     safety_energy = c.R_SAFETY * max_energy
     required_energy = max(trip_energy, safety_energy)
+    # TODO: consider setting required_energy = house.ev.size
+
+    # delta energy is the energy we need to charge or discharge to reach the required SOC
     delta_energy = required_energy - current_energy
 
-    logger.debug(f'EV power max: {round(ev_power_max, 2)}')
+    logger.debug(
+        f"[trip: {trip_energy:.2f}], [safety: {safety_energy:.2f}], [current: {current_energy:.2f}]"
+        f"[required: {required_energy:.2f}], [delta: {delta_energy:.2f}]"
+    )
 
-    # we need to charge to reach the required SOC
-    if delta_energy >= 0 or not discharge:
-        # minimum = we charge to reach just above the required SOC
-        min_power = min(ev_power_max, (delta_energy * 4 / time_left))
-        # maximum = we charge at max power
+    # we must charge to reach the required SOC
+    if delta_energy >= 0:
+        logger.debug(f"Delta energy = {delta_energy:.2f} >= 0, we must charge")
+
+        # this max power is either what is left to fully charge the battery or the max charging capability
         max_power = min(ev_power_max, energy_to_max * 4)
+        min_power = min(ev_power_max, (delta_energy * 4 / time_left))
 
     # we are allowed to discharge to reach just above the required SOC
     else:
-        # minimum = we don't discharge even if we can
-        min_power = 0
-        # maximum = we discharge to reach just above the required SOC
-        max_power = max(-ev_power_max, (delta_energy * 4 / time_left))
+        logger.debug(f"Delta energy = {delta_energy:.2f} < 0, we can discharge")
+        # determine maximum discharge power based on required SOC
+        # this value is negative, * 4 for conversion from energy to power
+        dis_power = max(-ev_power_max, (delta_energy * 4 / time_left))
 
-    logger.debug(f'[min, max] power: [{round(min_power, 2)}, {round(max_power, 2)}]')
+        # max charging power (either what is left to fully charge battery or max charge power)
+        # TODO: which is better?
+        # charge_power = min(energy_to_max * 4, ev_power_max)
+        charge_power = min(required_energy * 4, ev_power_max)
+
+        # set min and max power
+        min_power = dis_power
+        max_power = charge_power
+
+    logger.debug(f"[min, max] power: [{round(min_power, 2)}, {round(max_power, 2)}]")
     return min_power, max_power
 
 
@@ -96,7 +114,7 @@ def limit_ev(house: House, i: int):
     """
     # vehicle not home, so minmax = [0,0]
     if house.ev.session[i] == -1:
-        logger.debug('EV not home')
+        logger.debug("EV not home")
         house.ev.minmax = [0, 0]
 
     # vehicle is home, so minmax = [min_power, max_power]

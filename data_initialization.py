@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(c.LOG_LEVEL_DATAINIT)
 logger.addHandler(c.handler)
 
+
 class House:
     def __init__(self, sim_length, id, baseload, pv_data, ev_data, hp_data):
         # General House Parameters

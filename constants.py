@@ -15,9 +15,17 @@ off_peak_wd = [4 * wd_start, int(4 * wd_end)]  # @ workday
 off_peak_we = [4 * 0, 4 * 24]  # @ weekend
 
 # LOGGING settings
+LOG_LEVEL_GLOBAL = logging.INFO
 LOG_LEVEL_MAIN = logging.INFO
 LOG_LEVEL_MINMAX = logging.INFO
 LOG_LEVEL_DATAINIT = logging.INFO
+
+if LOG_LEVEL_MAIN > LOG_LEVEL_GLOBAL:
+    LOG_LEVEL_MAIN = LOG_LEVEL_GLOBAL
+if LOG_LEVEL_MINMAX > LOG_LEVEL_GLOBAL:
+    LOG_LEVEL_MINMAX = LOG_LEVEL_GLOBAL
+if LOG_LEVEL_DATAINIT > LOG_LEVEL_GLOBAL:
+    LOG_LEVEL_DATAINIT = LOG_LEVEL_GLOBAL
 
 current_time = time.strftime("%Y%m%d-%H%M%S")
 sim_path = os.path.join("sims", current_time)
@@ -35,5 +43,5 @@ formatter = logging.Formatter(
 handler.setFormatter(formatter)
 
 # range safety constant (% of battery size)
-R_SAFETY = 0.2
+R_SAFETY = 0.5
 P_MAX_CHARGE = 0.2

@@ -29,9 +29,12 @@ number_of_houses = 100
 
 # (1) INITIALIZE DATA
 # this creates the list of houses object and arranges all the earlier loaded data correctly
-[list_of_houses, ren_share, temperature_data, day_ahead_prices] = data_initialization.initialize(
-    sim_length, number_of_houses
-)
+[
+    list_of_houses,
+    ren_share,
+    temperature_data,
+    day_ahead_prices,
+] = data_initialization.initialize(sim_length, number_of_houses)
 
 # array to store the total combined load of all households for each timestep
 total_load = np.zeros(sim_length)
@@ -54,9 +57,43 @@ def off_peak_ptu(i: int):
     return (ptu_in_day >= charge_session[0]) and (ptu_in_day < charge_session[1])
 
 
+def get_min_max_range(
+    price_data: np.array, minmax_price_range: np.array, eps: float = 1e-6
+):
+    """
+    Determine the min and max price range for the next 24 hours
+
+    This is essentially normalizing the inverted price data to the range [0, 1]
+
+    :param price_data: array with day-ahead prices
+    :param minmax_price_range: array with current normalized price range
+    :param eps: epsilon to avoid division by zero
+    :return: normalized price data
+    """
+    # invert the price data
+    price_data = -price_data
+    min_price = np.min(price_data)
+    max_price = np.max(price_data)
+
+    # normalize the price data to the range [0, 1] and return
+    norm = (price_data - min_price) / (max_price - min_price + eps)
+    minmax_price_range[: len(norm)] = norm
+    return minmax_price_range
+
+
+# EV
+# if off_peak_ptu(i):
+#     house.ev.discharge = False
+# else:
+#     house.ev.discharge = True
+
 if __name__ == "__main__":
     logger.info("Starting simulation")
     t_start = time.time()
+
+    # normalized prices to do congestion based charging
+    ts = 24
+    minmax_price_range = np.ones(96)
 
     for i in range(0, sim_length):
         # (2) determine the min and max power consumption of each DER during this timestep
@@ -66,11 +103,23 @@ if __name__ == "__main__":
         day_ahead_price = day_ahead_prices[i]
         logger.debug(f"Day-ahead price: {day_ahead_price} (EUR/MWh)")
 
+        # if we pass to the next day we need to determine the min and max price range for the next 24 hours
+        if i % ts == 0:
+            minmax_price_range = get_min_max_range(
+                day_ahead_prices[i : i + 96], minmax_price_range
+            )
+
         for house in list_of_houses:
             logger.debug(
                 f" --- House: {house.id} at timestep: {i} (off-peak: {off_peak_ptu(i)}, time[HH:MM]: {i%96*15//60:02}:{i%96*15%60:02}), weekday: {i//96%7} --- "
             )
+
             # (3) now we determine the actual consumption of each DER
+
+            # EV
+            v2h = house.ev.v2h
+            v2g = house.ev.v2g
+
             # The PV wil always generate maximum power
             house.pv.consumption[i] = house.pv.minmax[1]
 
@@ -81,40 +130,39 @@ if __name__ == "__main__":
                 house.base_data[i] + house.pv.consumption[i] + house.hp.consumption[i]
             )
 
-            # EV
-            v2h = house.ev.v2h
-            v2g = house.ev.v2g
+            logger.debug(f"Base load house: {house_base_load:.2f} kW")
 
-            # we are in an off-peak PTU
-            if off_peak_ptu(i):
-                logger.debug("Off-peak PTU")
+            # determine the EV consumption min/max power
+            p_min = house.ev.minmax[0]
+            p_max = house.ev.minmax[1]
+            p_scalar = minmax_price_range[i % 96]
+            p_ev = p_min + p_max * p_scalar
 
-                # in an off-peak PTU we always maximally charge the EV
-                house.ev.discharge = False
-                house.ev.consumption[i] = house.ev.minmax[1]
-
-            # we are in peak PTU
-            else:
-                logger.debug("On-peak PTU")
-                house.ev.discharge = True
-                # max charge up to required SOC
-                # or if we are already above this level, we can use V2H
+            # if we use v2h we can discharge the EV
+            if v2h:
+                # we only discharge if there is a positive house load
                 if house_base_load > 0:
-                    house.ev.consumption[i] = max(
-                        house.ev.minmax[0], -house_base_load
-                    )
-            
-            # calculate the total load of the household
-            house_load = house_base_load + house.ev.consumption[i]
-            logger.debug(f"EV load: {house.ev.consumption[i]}")
-            logger.debug(f"Base load: {house_base_load}")
+                    p_ev = max(p_ev, -house_base_load)
+            else:
+                # if we don't use v2h we can only charge the EV
+                p_ev = min(p_ev, 0)
 
-            # TODO: move this to off_peak_ptu section
+            house.ev.consumption[i] = p_ev
+            logger.debug(f"EV consumption: {house.ev.consumption[i]:.2f} kW")
+
+            # add the EV consumption to the base load
+            house_load = house_base_load + house.ev.consumption[i]
+
             if house_load <= 0:  # if the combined load is negative, charge the battery
-                logger.debug(f'Charging battery with: {round(house_load,2)}')
                 house.batt.consumption[i] = min(-house_load, house.batt.minmax[1])
+                logger.debug(
+                    f"House {house.id} is charging the battery with {house.batt.consumption[i]:.2f} kW"
+                )
             else:  # always immediately discharge the battery
                 house.batt.consumption[i] = max(-house_load, house.batt.minmax[0])
+                logger.debug(
+                    f"House {house.id} is discharging the battery with {house.batt.consumption[i]:.2f} kW"
+                )
 
         # (4) Response and update DERs for the determined power consumption
         total_load[i] = response.response(list_of_houses, i, temperature_data[i])
