@@ -57,5 +57,5 @@ PTU_REFRESH_P_SCALAR_INT = 96
 PTU_REFRESH_P_OFFSET = 0
 
 # for plotting consumption data of a single house
-PLOT_HOUSE = 1  # random.randint(1, 101)  # house number, starting at 1
+PLOT_HOUSE = 10  # random.randint(1, 101)  # house number, starting at 1
 PLOT_DAY = 7  # random.randint(0, 364)  # day of the year, starting at 0

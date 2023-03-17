@@ -229,7 +229,7 @@ if __name__ == "__main__":
             house_load = house_base_load + house.ev.consumption[i]
 
             # manage the battery
-            if house_load <= 0:  # if the combined load is negative, charge the battery
+            if house_load <= 0 or p_scalar > 0.5:
                 house.batt.consumption[i] = min(-house_load, house.batt.minmax[1])
                 logger.debug(
                     f"House {house.id} is charging the EV battery with {house.batt.consumption[i]:.2f} kW"

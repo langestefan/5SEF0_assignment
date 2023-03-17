@@ -57,20 +57,20 @@ def determine_v2hg_limits(house: House, i: int):
 
         # this max power is either what is left to fully charge the battery or the max charging capability
         max_power = min(ev_power_max, energy_to_max * 4)
-        min_power = min(ev_power_max, (delta_energy * 4 / time_left))
+        min_power = min(ev_power_max, ((delta_energy) * 4 / time_left))
 
     # we are allowed to discharge to reach just above the required SOC
     else:
         logger.debug(f"Delta energy = {delta_energy:.2f} < 0, we can discharge")
 
-        # determine maximum discharge power (either what is left or max discharge power), 
-        # this value is negative (multiplication by 4 for conversion from energy to power)
-        # dis_power = max(-ev_power_max, (delta_energy * 4 / time_left))
-        dis_power = max(-ev_power_max, -((current_energy) * 4))
+        # determine maximum discharge power (either what is left or max discharge power),
+        # or discharge delta_energy in the time left
+        dis_power = max(
+            -ev_power_max, -((current_energy) * 4), ((delta_energy) * 4 / time_left)
+        )
 
         # max charging power (either what is left to fully charge battery or max charge power)
-        charge_power = c.P_MAX_CHARGE * min(ev_power_max, (energy_to_max * 4))
-        # charge_power = 0
+        charge_power = min(ev_power_max, (energy_to_max * 4))
 
         # set min and max power
         min_power = dis_power
