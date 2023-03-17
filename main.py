@@ -1,5 +1,7 @@
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 import logging
 import time
 import os
@@ -17,8 +19,10 @@ logger.addHandler(c.handler)
 
 # create a logging format
 logging.basicConfig(
-    format=("[%(asctime)s.%(msecs)03d] %(levelname)s [%(name)s:%(lineno)s] %(message)s"),
-    datefmt='%H:%M:%S'
+    format=(
+        "[%(asctime)s.%(msecs)03d] %(levelname)s [%(name)s:%(lineno)s] %(message)s"
+    ),
+    datefmt="%H:%M:%S",
 )
 
 # INITIALIZE SCENARIO
@@ -57,6 +61,18 @@ def off_peak_ptu(i: int):
     return (ptu_in_day >= charge_session[0]) and (ptu_in_day < charge_session[1])
 
 
+def ptu_to_hhmm(ptu: int):
+    """
+    Convert a ptu to a string in the format hh:mm
+
+    :param ptu: ptu to convert
+    :return: string in the format hh:mm
+    """
+    hour = ptu // 4
+    minute = (ptu % 4) * 15
+    return f"{hour:02d}:{minute:02d}"
+
+
 def get_min_max_range(
     price_data: np.array, minmax_price_range: np.array, eps: float = 1e-6
 ):
@@ -81,19 +97,73 @@ def get_min_max_range(
     return minmax_price_range
 
 
-# EV
-# if off_peak_ptu(i):
-#     house.ev.discharge = False
-# else:
-#     house.ev.discharge = True
+def plot_loads(data: pd.DataFrame, title: str):
+    """
+    Plot consumption of each DER for a single house for 24 hours (96 ptu's)
+
+    :param house: house to plot (index in list_of_houses)
+    :param data: DataFrame with consumption data + normalized price data
+    :param title: title of the plot
+    """
+    if len(data) != 96:
+        logger.error(f"Cannot plot data with {data.size} rows, expected 96")
+        return
+
+    # plot the consumption of each DER price on twinx
+    fig, ax1 = plt.subplots()
+    ax1.plot(data["pv"], label="PV", color="green")
+    ax1.plot(data["hp"], label="HP", color="red")
+    ax1.plot(data["ev"], label="EV", color="blue")
+    ax1.plot(data["batt"], label="Battery", color="purple")
+    ax1.plot(data["house_total"], label="Total", color="black")
+    ax1.set_xlabel("Time [HH:MM]")
+    ax1.set_ylabel("Power [kW]")
+    ax1.set_title(title)
+    ax1.legend(loc="upper left")
+
+    ax2 = ax1.twinx()
+    ax2.plot(data["price"], label="Charge factor", color="orange")
+    ax2.set_ylabel("Norm. Charge Factor [0, 1]")
+    ax2.legend(loc="upper right")
+
+    # set the xticks to the correct time
+    xticks = [ptu_to_hhmm(i) for i in range(0, 97, 12)]
+    ax1.set_xticks(range(0, 97, 12))
+    ax1.set_xticklabels(xticks)
+
+    # yticks to integer values
+    ax1.yaxis.set_major_locator(MaxNLocator(integer=True))
+    ax2.yaxis.set_major_locator(MaxNLocator(integer=True))
+    ax1.grid(True)
+
+    # save the plot
+    fig.tight_layout()
+    save_path = os.path.join(c.sim_path, f"{title}.png")
+    logger.info(f"Saving plot to {save_path}")
+    fig.savefig(save_path, dpi=300)
+    plt.close(fig)
+
 
 if __name__ == "__main__":
     logger.info("Starting simulation")
     t_start = time.time()
 
     # normalized prices to do congestion based charging
-    ts = 24
+    ts = c.PTU_REFRESH_P_SCALAR_INT
     minmax_price_range = np.ones(96)
+
+    # empty df for ploting consumption data
+    plot_data = pd.DataFrame(
+        columns=[
+            "pv",
+            "hp",
+            "ev",
+            "batt",
+            "house_total",
+            "price",
+        ],
+        index=range(96),
+    )
 
     for i in range(0, sim_length):
         # (2) determine the min and max power consumption of each DER during this timestep
@@ -104,11 +174,16 @@ if __name__ == "__main__":
         logger.debug(f"Day-ahead price: {day_ahead_price} (EUR/MWh)")
 
         # if we pass to the next day we need to determine the min and max price range for the next 24 hours
-        if i % ts == 0:
+        if i % 96 == c.PTU_REFRESH_P_OFFSET:
             minmax_price_range = get_min_max_range(
-                day_ahead_prices[i : i + 96], minmax_price_range
+                day_ahead_prices[i : i + 96],
+                minmax_price_range,
+            )
+            logger.debug(
+                f"New min-max price range: \n{minmax_price_range} at: {ptu_to_hhmm(i%96)}"
             )
 
+        # loop over all houses
         for house in list_of_houses:
             logger.debug(
                 f" --- House: {house.id} at timestep: {i} (off-peak: {off_peak_ptu(i)}, time[HH:MM]: {i%96*15//60:02}:{i%96*15%60:02}), weekday: {i//96%7} --- "
@@ -145,7 +220,7 @@ if __name__ == "__main__":
                     p_ev = max(p_ev, -house_base_load)
             else:
                 # if we don't use v2h we can only charge the EV
-                p_ev = min(p_ev, 0)
+                p_ev = max(p_ev, 0)
 
             house.ev.consumption[i] = p_ev
             logger.debug(f"EV consumption: {house.ev.consumption[i]:.2f} kW")
@@ -153,6 +228,7 @@ if __name__ == "__main__":
             # add the EV consumption to the base load
             house_load = house_base_load + house.ev.consumption[i]
 
+            # manage the battery
             if house_load <= 0:  # if the combined load is negative, charge the battery
                 house.batt.consumption[i] = min(-house_load, house.batt.minmax[1])
                 logger.debug(
@@ -164,10 +240,24 @@ if __name__ == "__main__":
                     f"House {house.id} is discharging the EV battery with {house.batt.consumption[i]:.2f} kW"
                 )
 
+            # make a plot of the consumption of each DER for house c.PLOT_HOUSE
+            if house.id == c.PLOT_HOUSE and i // 96 == c.PLOT_DAY:
+                plot_data.loc[i % 96] = [
+                    house.pv.consumption[i],
+                    house.hp.consumption[i],
+                    house.ev.consumption[i],
+                    house.batt.consumption[i],
+                    house_load,
+                    minmax_price_range[i % 96],
+                ]
+
         # (4) Response and update DERs for the determined power consumption
         total_load[i] = response.response(list_of_houses, i, temperature_data[i])
 
     logger.info(f"Finished simulation in {round(time.time() - t_start)} seconds")
+
+    # plot the consumption of each DER for house c.PLOT_HOUSE
+    plot_loads(plot_data, f"load_house{c.PLOT_HOUSE}_day{c.PLOT_DAY}")
 
 reference_load = np.load("reference_load.npy")  # load the reference profile
 

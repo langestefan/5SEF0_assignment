@@ -27,8 +27,8 @@ def determine_v2hg_limits(house: House, i: int):
     """
     # energy left to charge battery to max = 100% SOC - current SOC
     max_energy = house.ev.size  # energy at 100% SOC
-    current_energy = floor(house.ev.energy)  # energy at current SOC
-    energy_to_max = ceil(max_energy - current_energy)
+    current_energy = house.ev.energy  # energy at current SOC
+    energy_to_max = max_energy - current_energy
 
     # current session and time left before leaving
     session = int(house.ev.session[i])
@@ -38,7 +38,7 @@ def determine_v2hg_limits(house: House, i: int):
     ev_power_max = house.ev.power_max
 
     # calculate energy quantities
-    trip_energy = ceil(house.ev.session_trip_energy[session])
+    trip_energy = house.ev.session_trip_energy[session]
     safety_energy = c.R_SAFETY * max_energy
     required_energy = max(trip_energy, safety_energy)
     # TODO: consider setting required_energy = house.ev.size
@@ -47,13 +47,13 @@ def determine_v2hg_limits(house: House, i: int):
     delta_energy = required_energy - current_energy
 
     logger.debug(
-        f"[trip: {trip_energy:.2f}], [safety: {safety_energy:.2f}], [current: {current_energy:.2f}]"
-        f"[required: {required_energy:.2f}], [delta: {delta_energy:.2f}]"
+        f"EV [trip: {trip_energy:.2f}], [safety: {safety_energy:.2f}], [current: {current_energy:.2f}], "
+        f"[required: {required_energy:.2f}], [delta: {delta_energy:.2f}], [to max: {energy_to_max:.2f}]"
     )
 
     # we must charge to reach the required SOC
     if delta_energy >= 0:
-        logger.debug(f"Delta energy = {delta_energy:.2f} >= 0, we must charge")
+        logger.debug(f"EV delta energy = {delta_energy:.2f} >= 0, we must charge")
 
         # this max power is either what is left to fully charge the battery or the max charging capability
         max_power = min(ev_power_max, energy_to_max * 4)
@@ -67,15 +67,14 @@ def determine_v2hg_limits(house: House, i: int):
         dis_power = max(-ev_power_max, (delta_energy * 4 / time_left))
 
         # max charging power (either what is left to fully charge battery or max charge power)
-        # TODO: which is better?
-        # charge_power = min(energy_to_max * 4, ev_power_max)
-        charge_power = min(required_energy * 4, ev_power_max)
+        # TODO: what is best here? 
+        charge_power = min(ev_power_max, (energy_to_max * 4 / time_left))
 
         # set min and max power
         min_power = dis_power
         max_power = charge_power
 
-    logger.debug(f"[min, max] power: [{round(min_power, 2)}, {round(max_power, 2)}]")
+    logger.debug(f"EV [min, max] power: [{round(min_power, 2)}, {round(max_power, 2)}]")
     return min_power, max_power
 
 
