@@ -138,6 +138,7 @@ def limit_batt(house: House):
 
     # max charging power (either what is left to fully charge battery or max charge power), this value is positive
     charge_power = min((house.batt.size - house.batt.energy) * 4, house.batt.power_max)
+    logger.debug(f"Batt [min, max] power: [{round(dis_power, 2)}, {round(charge_power, 2)}]")
     house.batt.minmax = [dis_power, charge_power]
 
 

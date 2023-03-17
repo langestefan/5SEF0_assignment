@@ -115,6 +115,7 @@ def plot_loads(data: pd.DataFrame, title: str):
     ax1.plot(data["hp"], label="HP", color="red")
     ax1.plot(data["ev"], label="EV", color="blue")
     ax1.plot(data["batt"], label="Battery", color="purple")
+    ax1.plot(data["appl"], label="Appl", color="grey")
     ax1.plot(data["house_total"], label="Total", color="black")
     ax1.set_xlabel("Time [HH:MM]")
     ax1.set_ylabel("Power [kW]")
@@ -159,6 +160,7 @@ if __name__ == "__main__":
             "hp",
             "ev",
             "batt",
+            "appl",
             "house_total",
             "price",
         ],
@@ -174,7 +176,7 @@ if __name__ == "__main__":
         logger.debug(f"Day-ahead price: {day_ahead_price} (EUR/MWh)")
 
         # if we pass to the next day we need to determine the min and max price range for the next 24 hours
-        if i % 96 == c.PTU_REFRESH_P_OFFSET:
+        if i % ts == 0:
             minmax_price_range = get_min_max_range(
                 day_ahead_prices[i : i + 96],
                 minmax_price_range,
@@ -210,17 +212,18 @@ if __name__ == "__main__":
             # determine the EV consumption min/max power
             p_min = house.ev.minmax[0]
             p_max = house.ev.minmax[1]
-            p_scalar = minmax_price_range[i % 96]
+            p_scalar = minmax_price_range[i % ts]
             p_ev = p_min + (p_max - p_min) * p_scalar
+
+            logger.debug(f'Current p_scaler: {p_scalar}')
 
             # if we use v2h we can discharge the EV
             if v2h:
                 # we only discharge if there is a positive house load
-                if house_base_load > 0:
+                if house_base_load > 0 and p_scalar < 0.3:
                     p_ev = max(p_ev, -house_base_load)
-            else:
-                # if we don't use v2h we can only charge the EV
-                p_ev = max(p_ev, 0)
+                else:
+                    p_ev = max(p_ev, 0)
 
             house.ev.consumption[i] = p_ev
             logger.debug(f"EV consumption: {house.ev.consumption[i]:.2f} kW")
@@ -228,17 +231,21 @@ if __name__ == "__main__":
             # add the EV consumption to the base load
             house_load = house_base_load + house.ev.consumption[i]
 
-            # manage the battery
-            if house_load <= 0 or p_scalar > 0.5:
+            # charge the battery
+            if house_load <= 0:
                 house.batt.consumption[i] = min(-house_load, house.batt.minmax[1])
                 logger.debug(
                     f"House {house.id} is charging the EV battery with {house.batt.consumption[i]:.2f} kW"
                 )
-            else:  # always immediately discharge the battery
+            # discharge the battery
+            else:
                 house.batt.consumption[i] = max(-house_load, house.batt.minmax[0])
                 logger.debug(
                     f"House {house.id} is discharging the EV battery with {house.batt.consumption[i]:.2f} kW"
                 )
+
+            # update house_load with the battery consumption
+            house_load += house.batt.consumption[i]
 
             # make a plot of the consumption of each DER for house c.PLOT_HOUSE
             if house.id == c.PLOT_HOUSE and i // 96 == c.PLOT_DAY:
@@ -247,8 +254,9 @@ if __name__ == "__main__":
                     house.hp.consumption[i],
                     house.ev.consumption[i],
                     house.batt.consumption[i],
+                    house.base_data[i],
                     house_load,
-                    minmax_price_range[i % 96],
+                    minmax_price_range[i % ts],
                 ]
 
         # (4) Response and update DERs for the determined power consumption

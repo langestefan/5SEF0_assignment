@@ -10,6 +10,29 @@ logger.addHandler(c.handler)
 heat_capacity_water = 4182  # [J/kg.K]
 
 
+def check_capacity(batt, name: str, i: int, house_id: int):
+    """ Check if battery is too full or empty
+
+    :param batt: battery object
+    :param name: name of battery
+    :param i: timestep
+    :param house_id: house id
+    """
+    # double check if house battery is too full or empty
+    if (0 > np.round(batt.energy, 4)) or (
+        np.round(batt.energy, 4) > batt.size
+    ):
+        delta = round(batt.energy - batt.size, 3)
+        if delta > 0:
+            str = "full"
+        else:
+            str = "empty"
+        logger.error(
+            f"{name} batt too {str}: idx: {i} by amount: {delta} kWh for house: {house_id}"
+        )
+
+
+
 def response(list_of_houses: list, i: int, T_ambient: float):
     """
     This function is called every timestep and updates the DERs given the
@@ -47,17 +70,7 @@ def response(list_of_houses: list, i: int, T_ambient: float):
             house.ev.energy += house.ev.consumption[i] / 4
 
             # double check if battery is too full or empty
-            if (0 > np.round(house.ev.energy, 4)) or (
-                np.round(house.ev.energy, 4) > house.ev.size
-            ):
-                delta = round(house.ev.energy - house.ev.size, 3)
-                if delta > 0:
-                    str = "full"
-                else:
-                    str = "empty"
-                logger.error(
-                    f"EV battery too {str}: idx: {i} by amount: {delta} kWh for house: {house.id}"
-                )
+            check_capacity(house.ev, "EV", i, house.id)
 
         # HP
         if house.ders[3] == 1:
@@ -100,6 +113,10 @@ def response(list_of_houses: list, i: int, T_ambient: float):
 
         # BATT
         if house.ders[2] == 1:
+
+            # double check if battery is too full or empty
+            check_capacity(house.batt, "House", i, house.id)
+
             # save batt SoC for later analysis
             house.batt.energy_history[i] = house.batt.energy
             # update battery (note conversion from kW to kWh)
