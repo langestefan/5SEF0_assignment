@@ -44,8 +44,8 @@ formatter = logging.Formatter(
 handler.setFormatter(formatter)
 
 # range safety constant (% of battery size)
-R_SAFETY = 0.5
-P_MAX_CHARGE = 0.2
+R_SAFETY = 0.3
+P_MAX_CHARGE = 0.5
 
 # how often we refresh the min/max scalar for the next 24 hours (in ptu's)
 # for example: 48 means we refresh every 12 hours, 24 means we refresh every 6 hours... etc
