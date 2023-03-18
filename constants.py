@@ -54,9 +54,12 @@ PTU_REFRESH_P_SCALAR_INT = 96
 
 # for plotting consumption data of a single house
 PLOT_HOUSE = 1  # random.randint(1, 101)  # house number, starting at 1
-PLOT_DAY = 6  # random.randint(0, 364)  # day of the year, starting at 0
+PLOT_DAY = 115  # random.randint(0, 364)  # day of the year, starting at 0
 
 # for p_scalar randomness
 P_SCALAR_PETURBANCE = 0.2
 np.random.seed(42)
 pert = np.random.normal(0, P_SCALAR_PETURBANCE, 100)
+
+# number of houses to simulate
+N_HOUSES = 100

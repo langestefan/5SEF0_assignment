@@ -30,7 +30,7 @@ logging.basicConfig(
 # INITIALIZE SCENARIO
 # Length of simulation (96 ptu's per day and 7 days, 1 ptu = 15 minutes)
 sim_length = 96 * 7 * 52
-number_of_houses = 100
+number_of_houses = c.N_HOUSES
 
 
 # (1) INITIALIZE DATA
@@ -124,8 +124,9 @@ def plot_loads(data: pd.DataFrame, title: str):
     ax1.set_title(title)
     ax1.legend(loc="upper left")
 
+    # bar plot for the price
     ax2 = ax1.twinx()
-    ax2.plot(data["price"], label="Charge factor", color="orange")
+    ax2.bar(data.index, data["price"], label="Price", color="orange", alpha=0.3)
     ax2.set_ylabel("Norm. Charge Factor [0, 1]")
     ax2.legend(loc="upper right")
 
@@ -140,7 +141,7 @@ def plot_loads(data: pd.DataFrame, title: str):
     ax1.grid(True)
 
     # save the plot
-    fig.tight_layout()
+    # fig.tight_layout()
     save_path = os.path.join(c.sim_path, f"{title}.png")
     logger.info(f"Saving plot to {save_path}")
     fig.savefig(save_path, dpi=300)
@@ -219,7 +220,6 @@ if __name__ == "__main__":
                 p_scaler = minmax_price_range[i % ts]
 
                 # add a random peturbance to p_scaler
-                # p_scaler = np.clip(p_scaler + c.pert[house.id - 1], 0, 1)
                 logger.debug(f'Current p_scaler: {p_scaler}')
 
                 # The PV wil always generate maximum power
@@ -227,7 +227,6 @@ if __name__ == "__main__":
 
                 # The HP will keep the household temperature constant
                 p_min, p_max, p_hp = get_opt_cons(house.hp, p_scaler)
-                # house.hp.consumption[i] = house.hp.minmax[0]
                 house.hp.consumption[i] = p_hp
 
                 house_base_load = (
@@ -237,8 +236,7 @@ if __name__ == "__main__":
                 logger.debug(f"Base load house: {house_base_load:.2f} kW")
 
                 # determine the EV consumption
-                # for the EV with square p_scaler to spread the load over the day
-                p_min, p_max, p_ev = get_opt_cons(house.ev, np.sqrt(p_scaler))
+                p_min, p_max, p_ev = get_opt_cons(house.ev, p_scaler**(1/3))
 
                 # if we use v2h we can discharge the EV
                 if v2h:
@@ -254,24 +252,31 @@ if __name__ == "__main__":
                 # add the EV consumption to the base load
                 house_load = house_base_load + house.ev.consumption[i]
 
-                # charge the battery
+                # always charge the battery if we have a negative house load
                 if house_load <= 0:
-                    # house.batt.consumption[i] = min(-house_load, house.batt.minmax[1])
-                    p_min = min(-house_load, house.batt.minmax[1])
-                    p_max = house.batt.minmax[1]
-                    p_batt = p_min + (p_max - p_min) * p_scaler
-                    house.batt.consumption[i] = p_batt
-
+                    p_solar = min(-house_load, house.batt.minmax[1])
                     logger.debug(
-                        f"House {house.id} is charging the EV battery with {house.batt.consumption[i]:.2f} kW"
+                        f"House {house.id} is charging the house battery with {house.batt.consumption[i]:.2f} kW"
                     )
-                # discharge the battery
+
+                    # if p_scaler is high we can charge a little extra
+                    p_grid = 0
+                    p_max = house.batt.minmax[1]
+                    if p_scaler > 0.7:
+                        p_grid = p_max * (p_scaler**2)
+                        logger.debug(
+                            f"House {house.id} is charging the house battery EXTRA with {house.batt.consumption[i]:.2f} kW"
+                        )
+                    house.batt.consumption[i] = min(p_solar + p_grid, p_max)
+
+                # always discharge the battery
                 else:
                     house.batt.consumption[i] = max(-house_load, house.batt.minmax[0])
                     logger.debug(
-                        f"House {house.id} is discharging the EV battery with {house.batt.consumption[i]:.2f} kW"
+                        f"House {house.id} is discharging the house battery with {house.batt.consumption[i]:.2f} kW"
                     )
 
+  
                 # update house_load with the battery consumption
                 house_load += house.batt.consumption[i]
 
