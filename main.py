@@ -5,6 +5,8 @@ from matplotlib.ticker import MaxNLocator
 import logging
 import time
 import os
+from tqdm import trange
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 # import required .py files
 import data_initialization
@@ -145,6 +147,20 @@ def plot_loads(data: pd.DataFrame, title: str):
     plt.close(fig)
 
 
+def get_opt_cons(der_obj: object, p_scalar: float):
+    """
+    Get the optimal consumption of a DER based on the normalized price
+
+    :param der_obj: DER object
+    :param p_scalar: normalized charge factor
+    :return: min and max power
+    """
+    p_min = der_obj.minmax[0]
+    p_max = der_obj.minmax[1]
+    p_act = p_min + (p_max - p_min) * p_scalar
+    return p_min, p_max, p_act
+
+
 if __name__ == "__main__":
     logger.info("Starting simulation")
     t_start = time.time()
@@ -167,105 +183,117 @@ if __name__ == "__main__":
         index=range(96),
     )
 
-    for i in range(0, sim_length):
-        # (2) determine the min and max power consumption of each DER during this timestep
-        minmax.limit_ders(list_of_houses, i, temperature_data[i])
+    # run the simulation
+    with logging_redirect_tqdm():
+        for i in trange(0, sim_length):
+            # (2) determine the min and max power consumption of each DER during this timestep
+            minmax.limit_ders(list_of_houses, i, temperature_data[i])
 
-        # get day-ahead price for this timestep
-        day_ahead_price = day_ahead_prices[i]
-        logger.debug(f"Day-ahead price: {day_ahead_price} (EUR/MWh)")
+            # get day-ahead price for this timestep
+            day_ahead_price = day_ahead_prices[i]
+            logger.debug(f"Day-ahead price: {day_ahead_price} (EUR/MWh)")
 
-        # if we pass to the next day we need to determine the min and max price range for the next 24 hours
-        if i % ts == 0:
-            minmax_price_range = get_min_max_range(
-                day_ahead_prices[i : i + 96],
-                minmax_price_range,
-            )
-            logger.debug(
-                f"New min-max price range: \n{minmax_price_range} at: {ptu_to_hhmm(i%96)}"
-            )
+            # if we pass to the next day we need to determine the min and max price range for the next 24 hours
+            if i % ts == 0:
+                minmax_price_range = get_min_max_range(
+                    day_ahead_prices[i : i + 96],
+                    minmax_price_range,
+                )
+                logger.debug(
+                    f"New min-max price range: \n{minmax_price_range} at: {ptu_to_hhmm(i%96)}"
+                )
 
-        # loop over all houses
-        for house in list_of_houses:
-            logger.debug(
-                f" --- House: {house.id} at timestep: {i} (off-peak: {off_peak_ptu(i)}, time[HH:MM]: {i%96*15//60:02}:{i%96*15%60:02}), weekday: {i//96%7} --- "
-            )
+            # loop over all houses
+            for house in list_of_houses:
+                logger.debug(
+                    f" --- House: {house.id} at timestep: {i} (off-peak: {off_peak_ptu(i)}, time[HH:MM]: {i%96*15//60:02}:{i%96*15%60:02}), weekday: {i//96%7} --- "
+                )
 
-            # (3) now we determine the actual consumption of each DER
+                # (3) now we determine the actual consumption of each DER
 
-            # EV
-            v2h = house.ev.v2h
-            v2g = house.ev.v2g
+                # EV
+                v2h = house.ev.v2h
+                v2g = house.ev.v2g
 
-            # The PV wil always generate maximum power
-            house.pv.consumption[i] = house.pv.minmax[1]
+                # get the charging factor p_scaler for this timestep
+                p_scaler = minmax_price_range[i % ts]
 
-            # The HP will keep the household temperature constant
-            house.hp.consumption[i] = house.hp.minmax[0]
+                # add a random peturbance to p_scaler
+                # p_scaler = np.clip(p_scaler + c.pert[house.id - 1], 0, 1)
+                logger.debug(f'Current p_scaler: {p_scaler}')
 
-            house_base_load = (
-                house.base_data[i] + house.pv.consumption[i] + house.hp.consumption[i]
-            )
+                # The PV wil always generate maximum power
+                house.pv.consumption[i] = house.pv.minmax[1]
 
-            logger.debug(f"Base load house: {house_base_load:.2f} kW")
+                # The HP will keep the household temperature constant
+                p_min, p_max, p_hp = get_opt_cons(house.hp, p_scaler)
+                # house.hp.consumption[i] = house.hp.minmax[0]
+                house.hp.consumption[i] = p_hp
 
-            # determine the EV consumption min/max power
-            p_min = house.ev.minmax[0]
-            p_max = house.ev.minmax[1]
-            p_scalar = minmax_price_range[i % ts]
-            p_ev = p_min + (p_max - p_min) * p_scalar
+                house_base_load = (
+                    house.base_data[i] + house.pv.consumption[i] + house.hp.consumption[i]
+                )
 
-            logger.debug(f'Current p_scaler: {p_scalar}')
+                logger.debug(f"Base load house: {house_base_load:.2f} kW")
 
-            # if we use v2h we can discharge the EV
-            if v2h:
-                # we only discharge if there is a positive house load
-                if house_base_load > 0 and p_scalar < 0.3:
-                    p_ev = max(p_ev, -house_base_load)
+                # determine the EV consumption
+                # for the EV with square p_scaler to spread the load over the day
+                p_min, p_max, p_ev = get_opt_cons(house.ev, np.sqrt(p_scaler))
+
+                # if we use v2h we can discharge the EV
+                if v2h:
+                    # we only discharge if there is a positive house load
+                    if house_base_load > 0:
+                        p_ev = max(p_ev, -house_base_load)
+                    else:
+                        p_ev = max(p_ev, 0)
+
+                house.ev.consumption[i] = p_ev
+                logger.debug(f"EV consumption: {house.ev.consumption[i]:.2f} kW")
+
+                # add the EV consumption to the base load
+                house_load = house_base_load + house.ev.consumption[i]
+
+                # charge the battery
+                if house_load <= 0:
+                    # house.batt.consumption[i] = min(-house_load, house.batt.minmax[1])
+                    p_min = min(-house_load, house.batt.minmax[1])
+                    p_max = house.batt.minmax[1]
+                    p_batt = p_min + (p_max - p_min) * p_scaler
+                    house.batt.consumption[i] = p_batt
+
+                    logger.debug(
+                        f"House {house.id} is charging the EV battery with {house.batt.consumption[i]:.2f} kW"
+                    )
+                # discharge the battery
                 else:
-                    p_ev = max(p_ev, 0)
+                    house.batt.consumption[i] = max(-house_load, house.batt.minmax[0])
+                    logger.debug(
+                        f"House {house.id} is discharging the EV battery with {house.batt.consumption[i]:.2f} kW"
+                    )
 
-            house.ev.consumption[i] = p_ev
-            logger.debug(f"EV consumption: {house.ev.consumption[i]:.2f} kW")
+                # update house_load with the battery consumption
+                house_load += house.batt.consumption[i]
 
-            # add the EV consumption to the base load
-            house_load = house_base_load + house.ev.consumption[i]
+                # make a plot of the consumption of each DER for house c.PLOT_HOUSE
+                if house.id == c.PLOT_HOUSE and i // 96 == c.PLOT_DAY:
+                    plot_data.loc[i % 96] = [
+                        house.pv.consumption[i],
+                        house.hp.consumption[i],
+                        house.ev.consumption[i],
+                        house.batt.consumption[i],
+                        house.base_data[i],
+                        house_load,
+                        minmax_price_range[i % ts],
+                    ]
 
-            # charge the battery
-            if house_load <= 0:
-                house.batt.consumption[i] = min(-house_load, house.batt.minmax[1])
-                logger.debug(
-                    f"House {house.id} is charging the EV battery with {house.batt.consumption[i]:.2f} kW"
-                )
-            # discharge the battery
-            else:
-                house.batt.consumption[i] = max(-house_load, house.batt.minmax[0])
-                logger.debug(
-                    f"House {house.id} is discharging the EV battery with {house.batt.consumption[i]:.2f} kW"
-                )
+            # (4) Response and update DERs for the determined power consumption
+            total_load[i] = response.response(list_of_houses, i, temperature_data[i])
 
-            # update house_load with the battery consumption
-            house_load += house.batt.consumption[i]
+        logger.info(f"Finished simulation in {round(time.time() - t_start)} seconds")
 
-            # make a plot of the consumption of each DER for house c.PLOT_HOUSE
-            if house.id == c.PLOT_HOUSE and i // 96 == c.PLOT_DAY:
-                plot_data.loc[i % 96] = [
-                    house.pv.consumption[i],
-                    house.hp.consumption[i],
-                    house.ev.consumption[i],
-                    house.batt.consumption[i],
-                    house.base_data[i],
-                    house_load,
-                    minmax_price_range[i % ts],
-                ]
-
-        # (4) Response and update DERs for the determined power consumption
-        total_load[i] = response.response(list_of_houses, i, temperature_data[i])
-
-    logger.info(f"Finished simulation in {round(time.time() - t_start)} seconds")
-
-    # plot the consumption of each DER for house c.PLOT_HOUSE
-    plot_loads(plot_data, f"load_house{c.PLOT_HOUSE}_day{c.PLOT_DAY}")
+        # plot the consumption of each DER for house c.PLOT_HOUSE
+        plot_loads(plot_data, f"load_house{c.PLOT_HOUSE}_day{c.PLOT_DAY}")
 
 reference_load = np.load("reference_load.npy")  # load the reference profile
 

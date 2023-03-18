@@ -1,7 +1,8 @@
 import logging
 import os
 import time
-import random
+import numpy as np
+from numpy.random import RandomState
 
 
 # v2g = True:  EV can be charged and discharged
@@ -10,7 +11,7 @@ v2h = True
 
 # off-peak ptu's of the day
 # 0 = 00:00-00:15, ..., 95 = 23:45-00:00
-wd_start = 0
+wd_start = 5
 wd_end = 15
 off_peak_wd = [4 * wd_start, int(4 * wd_end)]  # @ workday
 off_peak_we = [4 * 0, 4 * 24]  # @ weekend
@@ -44,18 +45,18 @@ formatter = logging.Formatter(
 handler.setFormatter(formatter)
 
 # range safety constant (% of battery size)
-R_SAFETY = 0.3
+R_SAFETY = 0.7
 P_MAX_CHARGE = 0.5
 
 # how often we refresh the min/max scalar for the next 24 hours (in ptu's)
 # for example: 48 means we refresh every 12 hours, 24 means we refresh every 6 hours... etc
-PTU_REFRESH_P_SCALAR_INT = 48
-
-# at which point in the day to do the refresh (in ptu's)
-# day-ahead prices are updated every 24 hours at 12:00 = 48 ptu
-# new prices are enabled at 00:00 = 0 ptu
-PTU_REFRESH_P_OFFSET = 48
+PTU_REFRESH_P_SCALAR_INT = 96
 
 # for plotting consumption data of a single house
 PLOT_HOUSE = 1  # random.randint(1, 101)  # house number, starting at 1
 PLOT_DAY = 6  # random.randint(0, 364)  # day of the year, starting at 0
+
+# for p_scalar randomness
+P_SCALAR_PETURBANCE = 0.2
+np.random.seed(42)
+pert = np.random.normal(0, P_SCALAR_PETURBANCE, 100)
