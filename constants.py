@@ -58,4 +58,4 @@ PTU_REFRESH_P_OFFSET = 48
 
 # for plotting consumption data of a single house
 PLOT_HOUSE = 1  # random.randint(1, 101)  # house number, starting at 1
-PLOT_DAY = 210  # random.randint(0, 364)  # day of the year, starting at 0
+PLOT_DAY = 6  # random.randint(0, 364)  # day of the year, starting at 0

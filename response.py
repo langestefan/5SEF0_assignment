@@ -57,7 +57,7 @@ def response(list_of_houses: list, i: int, T_ambient: float):
                     house.ev.energy -= house.ev.session_trip_energy[
                         int(house.ev.session[i - 1])
                     ]
-                    if house.ev.energy <= 0:
+                    if house.ev.energy < 0:
                         logger.error(
                             f"EV energy below 0: {i} by amount: {round(house.ev.energy, 3)} kWh for house: {house.id}"
                         )
