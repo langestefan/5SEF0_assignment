@@ -225,8 +225,13 @@ if __name__ == "__main__":
                 # The PV wil always generate maximum power
                 house.pv.consumption[i] = house.pv.minmax[1]
 
+                # The HP has the options to heat more or keep the temperature constant
+                if c.USE_FLEX_HEATING:
+                    p_min, p_max, p_hp = get_opt_cons(house.hp, p_scaler)
                 # The HP will keep the household temperature constant
-                p_min, p_max, p_hp = get_opt_cons(house.hp, p_scaler)
+                else:
+                    p_hp = house.hp.minmax[0]
+
                 house.hp.consumption[i] = p_hp
 
                 house_base_load = (

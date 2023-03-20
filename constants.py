@@ -11,6 +11,7 @@ v2h = True
 
 # if we use the home battery or not
 USE_HOME_BATTERY = True
+USE_FLEX_HEATING = False
 
 # off-peak ptu's of the day
 # 0 = 00:00-00:15, ..., 95 = 23:45-00:00
@@ -66,4 +67,3 @@ pert = np.random.normal(0, P_SCALAR_PETURBANCE, 100)
 
 # number of houses to simulate
 N_HOUSES = 100
-
