@@ -116,17 +116,17 @@ def plot_loads(data: pd.DataFrame, title: str):
     ax1.plot(data["pv"], label="PV", color="green")
     ax1.plot(data["hp"], label="HP", color="red")
     ax1.plot(data["ev"], label="EV", color="blue")
-    ax1.plot(data["batt"], label="Battery", color="purple")
+    ax1.plot(data["batt"], label="Batt", color="purple")
     ax1.plot(data["appl"], label="Appl", color="grey")
     ax1.plot(data["house_total"], label="Total", color="black")
     ax1.set_xlabel("Time [HH:MM]")
     ax1.set_ylabel("Power [kW]")
     ax1.set_title(title)
-    ax1.legend(loc="upper left")
+    ax1.legend(loc="upper left", ncol=3)
 
     # bar plot for the price
     ax2 = ax1.twinx()
-    ax2.bar(data.index, data["price"], label="Price", color="orange", alpha=0.3)
+    ax2.bar(data.index, data["price"], label="p_scaler", color="orange", alpha=0.3)
     ax2.set_ylabel("Norm. Charge Factor [0, 1]")
     ax2.legend(loc="upper right")
 
