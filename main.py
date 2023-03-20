@@ -244,14 +244,15 @@ if __name__ == "__main__":
                 p_min, p_max, p_ev = get_opt_cons(house.ev, p_scaler**(1/3))
 
                 # if we use v2h we can discharge the EV
-                if v2h:
-                    # we only discharge if there is a positive house load
-                    if house_base_load > 0:
-                        p_ev = max(p_ev, -house_base_load)
-                    else:
-                        p_ev = max(p_ev, 0)
+                # if v2h:
+                #     # we only discharge if there is a positive house load
+                #     if house_base_load > 0:
+                #         p_ev = max(p_ev, -house_base_load)
+                #     else:
+                #         p_ev = max(p_ev, 0)
 
-                house.ev.consumption[i] = p_ev
+                # house.ev.consumption[i] = p_ev
+                house.ev.consumption[i] = house.ev.minmax[0]
                 logger.debug(f"EV consumption: {house.ev.consumption[i]:.2f} kW")
 
                 # add the EV consumption to the base load
