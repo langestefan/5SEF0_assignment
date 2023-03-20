@@ -9,6 +9,9 @@ from numpy.random import RandomState
 v2g = False
 v2h = True
 
+# if we use the home battery or not
+USE_HOME_BATTERY = True
+
 # off-peak ptu's of the day
 # 0 = 00:00-00:15, ..., 95 = 23:45-00:00
 wd_start = 5
@@ -63,3 +66,4 @@ pert = np.random.normal(0, P_SCALAR_PETURBANCE, 100)
 
 # number of houses to simulate
 N_HOUSES = 100
+

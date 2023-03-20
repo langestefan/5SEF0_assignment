@@ -253,29 +253,26 @@ if __name__ == "__main__":
                 house_load = house_base_load + house.ev.consumption[i]
 
                 # always charge the battery if we have a negative house load
-                if house_load <= 0:
-                    p_solar = min(-house_load, house.batt.minmax[1])
-                    logger.debug(
-                        f"House {house.id} is charging the house battery with {house.batt.consumption[i]:.2f} kW"
-                    )
-
-                    # if p_scaler is high we can charge a little extra
-                    p_grid = 0
-                    p_max = house.batt.minmax[1]
-                    if p_scaler > 0.7:
-                        p_grid = p_max * (p_scaler**2)
+                if c.USE_HOME_BATTERY:
+                    if house_load <= 0:
+                        p_solar = min(-house_load, house.batt.minmax[1])
                         logger.debug(
-                            f"House {house.id} is charging the house battery EXTRA with {house.batt.consumption[i]:.2f} kW"
+                            f"House {house.id} is charging the house battery with {house.batt.consumption[i]:.2f} kW"
                         )
-                    house.batt.consumption[i] = min(p_solar + p_grid, p_max)
 
-                # always discharge the battery
+                        # if p_scaler is high we can charge a little extra up to 1 kW
+                        p_max = house.batt.minmax[1]
+                        p_grid = min(p_max * (p_scaler**2), 1)
+                        house.batt.consumption[i] = min(p_solar + p_grid, p_max)
+
+                    # always discharge the battery
+                    else:
+                        house.batt.consumption[i] = max(-house_load, house.batt.minmax[0])
+                        logger.debug(
+                            f"House {house.id} is discharging the house battery with {house.batt.consumption[i]:.2f} kW"
+                        )
                 else:
-                    house.batt.consumption[i] = max(-house_load, house.batt.minmax[0])
-                    logger.debug(
-                        f"House {house.id} is discharging the house battery with {house.batt.consumption[i]:.2f} kW"
-                    )
-
+                    house.batt.consumption[i] = 0
   
                 # update house_load with the battery consumption
                 house_load += house.batt.consumption[i]
