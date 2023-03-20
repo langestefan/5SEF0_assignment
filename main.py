@@ -75,8 +75,23 @@ def ptu_to_hhmm(ptu: int):
     return f"{hour:02d}:{minute:02d}"
 
 
+def exp_filter(x: np.array, alpha: float = 0.3):
+    """
+    Apply an exponential filter to the data
+
+    :param x: data to filter
+    :param alpha: filter parameter
+    :return: filtered data
+    """
+    y = np.zeros_like(x)
+    y[0] = x[0]
+    for i in range(1, len(x)):
+        y[i] = alpha * x[i] + (1 - alpha) * y[i - 1]
+    return y
+
+
 def get_min_max_range(
-    price_data: np.array, minmax_price_range: np.array, eps: float = 1e-6
+    price_data: np.array, minmax_price_range: np.array, eps: float = 1e-6, filter: bool = True
 ):
     """
     Determine the min and max price range for the next 24 hours
@@ -96,6 +111,11 @@ def get_min_max_range(
     # normalize the price data to the range [0, 1] and return
     norm = (price_data - min_price) / (max_price - min_price + eps)
     minmax_price_range[: len(norm)] = norm
+
+    # apply an exponential filter to p_scaler
+    if filter:
+        minmax_price_range = exp_filter(minmax_price_range)
+
     return minmax_price_range
 
 
