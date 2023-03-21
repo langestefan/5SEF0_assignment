@@ -260,36 +260,47 @@ if __name__ == "__main__":
 
                 logger.debug(f"Base load house: {house_base_load:.2f} kW")
 
-                # determine the EV consumption
-                p_min, p_max, p_ev = get_opt_cons(house.ev, p_scaler**(1/3))
+                # if we use flex charging we charge based on the price
+                if c.USE_FLEX_EV_CHARGING:
+                    p_min, p_max, p_ev = get_opt_cons(house.ev, p_scaler)
+                # no flex charging, so we charge the EV with maximum power
+                else:
+                    p_ev = house.ev.minmax[1]
 
                 # if we use v2h we can discharge the EV
-                # if v2h:
-                #     # we only discharge if there is a positive house load
-                #     if house_base_load > 0:
-                #         p_ev = max(p_ev, -house_base_load)
-                #     else:
-                #         p_ev = max(p_ev, 0)
+                if v2h:
+                    # we only discharge if there is a positive house load
+                    if house_base_load > 0:
+                        p_ev = max(p_ev, -house_base_load)
+                    else:
+                        p_ev = max(p_ev, 0)
+                # no v2h, so we can only charge the EV
+                else:
+                    p_ev = max(p_ev, 0)
 
-                # house.ev.consumption[i] = p_ev
-                house.ev.consumption[i] = house.ev.minmax[0]
+                house.ev.consumption[i] = p_ev
+                # house.ev.consumption[i] = house.ev.minmax[0]
                 logger.debug(f"EV consumption: {house.ev.consumption[i]:.2f} kW")
 
                 # add the EV consumption to the base load
                 house_load = house_base_load + house.ev.consumption[i]
 
-                # always charge the battery if we have a negative house load
                 if c.USE_HOME_BATTERY:
+                    # always charge the battery if we have a negative house load
                     if house_load <= 0:
                         p_solar = min(-house_load, house.batt.minmax[1])
+
+                        # if we use flex charging we charge extra based on the price
+                        p_grid = 0
+                        p_max = house.batt.minmax[1]
+                        if c.USE_FLEX_BATT_CHARGING:
+                            p_max = house.batt.minmax[1]
+                            p_grid = (p_max - p_solar) * (-np.cos(p_scaler) + 1)
+
+                        house.batt.consumption[i] = min(p_solar + p_grid, p_max)
                         logger.debug(
                             f"House {house.id} is charging the house battery with {house.batt.consumption[i]:.2f} kW"
                         )
-
-                        # if p_scaler is high we can charge a little extra up to 1 kW
-                        p_max = house.batt.minmax[1]
-                        p_grid = min(p_max * (p_scaler**2), 1)
-                        house.batt.consumption[i] = min(p_solar + p_grid, p_max)
 
                     # always discharge the battery
                     else:
