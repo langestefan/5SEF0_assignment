@@ -169,9 +169,6 @@ def plot_loads(data: pd.DataFrame, title: str):
     # total consumption
     ax1[0].plot(data.index, data["house_total"], label="Total", color="black")
 
-
-
-
     ax1[0].set_xlabel("Time [HH:MM]")
     ax1[0].set_ylabel("Power [kW]")
     ax1[0].set_title(title)
@@ -200,10 +197,9 @@ def plot_loads(data: pd.DataFrame, title: str):
     fig.set_size_inches(18, 8)
 
     # get closer borders
-    # fig.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
-    ax1[0].margins(0, 0)
+    ax1[0].margins(0, 0.1)
     ax1[1].margins(0, 0)
-    ax2.margins(0, 0)
+    ax2.margins(0, 0.1)
 
     # plot binary data["ev_home"] on the lower subplot as barh
     data = data["ev_home"]
