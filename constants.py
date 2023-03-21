@@ -52,7 +52,6 @@ handler.setFormatter(formatter)
 
 # range safety constant (% of battery size)
 R_SAFETY = 0.7
-P_MAX_CHARGE = 0.5
 
 # how often we refresh the min/max scalar for the next 24 hours (in ptu's)
 # for example: 48 means we refresh every 12 hours, 24 means we refresh every 6 hours... etc
@@ -60,7 +59,7 @@ PTU_REFRESH_P_SCALAR_INT = 96
 
 # for plotting consumption data of a single house
 PLOT_HOUSE = 1  # random.randint(1, 100)  # house number, starting at 1
-PLOT_DAY = 115  # random.randint(0, 364)  # day of the year, starting at 0
+PLOT_DAY = 10  # random.randint(0, 364)  # day of the year, starting at 0
 PLOT_LEN = 3  # plot duration in days
 
 # for p_scalar randomness

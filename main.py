@@ -139,7 +139,7 @@ def plot_loads(data: pd.DataFrame, title: str):
         return
 
     # plot the consumption of each DER price on twinx
-    fig, ax1 = plt.subplots(2, 1, gridspec_kw={'height_ratios': [14, 1]})
+    fig, ax1 = plt.subplots(2, 1, gridspec_kw={"height_ratios": [14, 1]})
 
     # stackplot of the consumption
     neg_data = data[data < 0].fillna(0)
@@ -322,24 +322,36 @@ if __name__ == "__main__":
 
                 logger.debug(f"Base load house: {house_base_load:.2f} kW")
 
-                # surplus power available for charging the EV (from PV)
+                # we charge based on p_scaler
+                p_ev_min, p_ev_max, __ = get_opt_cons(house.ev, p_scaler)
+
+                # positive house_base_load, we can discharge the EV if we want
+                p_surplus = 0
                 if house_base_load <= 0:
-                    p_surplus = min(-house_base_load, house.ev.minmax[1])
-                else:
-                    p_surplus = 0
+                    p_surplus = max(min(-house_base_load, house.ev.minmax[1]), 0)
 
-                # we charge extra based on the price
-                p_ev_min, p_ev_max, p_ev_opt = get_opt_cons(house.ev, -np.cos(p_scaler) + 1)
-
-                # calculate the actual EV consumption
-                p_ev_grid = max(p_ev_opt - p_surplus, 0)
-                p_ev = min(p_surplus + p_ev_grid, p_ev_max)
-
-                # if we don't use v2h we can't discharge the EV
-                if not v2h:
+                    # compute sum of all powers and scale it with p_scaler
+                    p_ev = p_ev_min + (p_ev_max - p_surplus - p_ev_min) * (
+                        -np.cos(p_scaler) + 1
+                    )
                     p_ev = max(p_ev, 0)
 
+                else:
+                    # compute sum of all powers and scale it with p_scaler
+                    p_ev = p_ev_min + (p_ev_max - p_ev_min) * (-np.cos(p_scaler) + 1)
+
+                    # if p_ev is negative it can never be smaller than house_base_load
+                    if p_ev < 0:
+                        if v2h:
+                            p_ev = max(p_ev, -house_base_load, house.ev.minmax[0])
+                        else:
+                            p_ev = 0
+                
+                logger.debug(f"[EV]min: {p_ev_min:.2f} kW, max: {p_ev_max:.2f} kW,"
+                             f"act: {p_ev:.2f} kW, surplus: {p_surplus:.2f} kW")
+
                 house.ev.consumption[i] = p_ev
+
                 # house.ev.consumption[i] = house.ev.minmax[0]
                 logger.debug(f"EV consumption: {house.ev.consumption[i]:.2f} kW")
 
