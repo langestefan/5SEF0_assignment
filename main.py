@@ -71,6 +71,8 @@ def ptu_to_hhmm(ptu: int):
     :return: string in the format hh:mm
     """
     hour = ptu // 4
+    if hour > 23:
+        hour -= 24
     minute = (ptu % 4) * 15
     return f"{hour:02d}:{minute:02d}"
 
@@ -91,7 +93,10 @@ def exp_filter(x: np.array, alpha: float = 0.3):
 
 
 def get_min_max_range(
-    price_data: np.array, minmax_price_range: np.array, eps: float = 1e-6, filter: bool = True
+    price_data: np.array,
+    minmax_price_range: np.array,
+    eps: float = 1e-6,
+    filter: bool = True,
 ):
     """
     Determine the min and max price range for the next 24 hours
@@ -127,44 +132,78 @@ def plot_loads(data: pd.DataFrame, title: str):
     :param data: DataFrame with consumption data + normalized price data
     :param title: title of the plot
     """
-    if len(data) != 96:
-        logger.error(f"Cannot plot data with {data.size} rows, expected 96")
+    if len(data) != 96 * c.PLOT_LEN:
+        logger.error(
+            f"Cannot plot data with {len(data)} rows, expected {96 * c.PLOT_LEN}"
+        )
         return
 
     # plot the consumption of each DER price on twinx
-    fig, ax1 = plt.subplots()
-    ax1.plot(data["pv"], label="PV", color="green")
-    ax1.plot(data["hp"], label="HP", color="red")
-    ax1.plot(data["ev"], label="EV", color="blue")
-    ax1.plot(data["batt"], label="Batt", color="purple")
-    ax1.plot(data["appl"], label="Appl", color="grey")
-    ax1.plot(data["house_total"], label="Total", color="black")
-    ax1.set_xlabel("Time [HH:MM]")
-    ax1.set_ylabel("Power [kW]")
-    ax1.set_title(title)
-    ax1.legend(loc="upper left", ncol=3)
+    fig, ax1 = plt.subplots(2, 1, gridspec_kw={'height_ratios': [14, 1]})
+    ax1[0].plot(data["pv"], label="PV", color="green")
+    ax1[0].plot(data["hp"], label="HP", color="red")
+    ax1[0].plot(data["ev"], label="EV", color="blue")
+    ax1[0].plot(data["batt"], label="Batt", color="purple")
+    ax1[0].plot(data["appl"], label="Appl", color="grey")
+    ax1[0].plot(data["house_total"], label="Total", color="black")
+    ax1[0].set_xlabel("Time [HH:MM]")
+    ax1[0].set_ylabel("Power [kW]")
+    ax1[0].set_title(title)
+    ax1[0].legend(loc="upper left", ncol=3)
 
     # bar plot for the price
-    ax2 = ax1.twinx()
+    ax2 = ax1[0].twinx()
     ax2.bar(data.index, data["price"], label="p_scaler", color="orange", alpha=0.3)
     ax2.set_ylabel("Norm. Charge Factor [0, 1]")
     ax2.legend(loc="upper right")
 
     # set the xticks to the correct time
-    xticks = [ptu_to_hhmm(i) for i in range(0, 97, 12)]
-    ax1.set_xticks(range(0, 97, 12))
-    ax1.set_xticklabels(xticks)
+    xticks = [ptu_to_hhmm(i) for i in range(0, 96 + 1, 48)] * c.PLOT_LEN
+    print(xticks)
+    ax1[0].set_xticks(range(0, 96 * (c.PLOT_LEN + 1) + 1, 48))
+    ax1[0].set_xticklabels(xticks)
 
     # yticks to integer values
-    ax1.yaxis.set_major_locator(MaxNLocator(integer=True))
+    ax1[0].yaxis.set_major_locator(MaxNLocator(integer=True))
     ax2.yaxis.set_major_locator(MaxNLocator(integer=True))
-    ax1.grid(True)
+    ax1[0].grid(True)
 
+    # set figure size
+    fig.set_size_inches(18, 8)
+
+    # get closer borders
+    # fig.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
+    ax1[0].margins(0, 0)
+    ax1[1].margins(0, 0)
+    ax2.margins(0, 0)
+
+    # plot binary data["ev_home"] on the lower subplot as barh
+    data = data["ev_home"]
+
+    # barh with small height
+    ax1[1].broken_barh(
+        [(i, 1) for i in range(len(data)) if data[i] == 1],
+        (0, 1),
+        facecolors="green",
+    )
+    ax1[1].broken_barh(
+        [(i, 1) for i in range(len(data)) if data[i] == 0],
+        (0, 1),
+        facecolors="red",
+    )
+    # ax1[1].set_xlabel("Time [HH:MM]")
+    ax1[1].set_ylabel("EV Home")
+    ax1[1].set_yticks([])
+    # ax1[1].set_xticks(range(0, 96 * (c.PLOT_LEN + 1) + 1, 48))
+    # ax1[1].set_xticklabels(xticks)
+    # disable xticks
+    ax1[1].set_xticks([])
+                    
     # save the plot
     # fig.tight_layout()
     save_path = os.path.join(c.sim_path, f"{title}.png")
     logger.info(f"Saving plot to {save_path}")
-    fig.savefig(save_path, dpi=300)
+    fig.savefig(save_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
     plt.close(fig)
 
 
@@ -200,8 +239,9 @@ if __name__ == "__main__":
             "appl",
             "house_total",
             "price",
+            "ev_home",
         ],
-        index=range(96),
+        index=range(96 * c.PLOT_LEN),
     )
 
     # run the simulation
@@ -240,7 +280,7 @@ if __name__ == "__main__":
                 p_scaler = minmax_price_range[i % ts]
 
                 # add a random peturbance to p_scaler
-                logger.debug(f'Current p_scaler: {p_scaler}')
+                logger.debug(f"Current p_scaler: {p_scaler}")
 
                 # The PV wil always generate maximum power
                 house.pv.consumption[i] = house.pv.minmax[1]
@@ -255,7 +295,9 @@ if __name__ == "__main__":
                 house.hp.consumption[i] = p_hp
 
                 house_base_load = (
-                    house.base_data[i] + house.pv.consumption[i] + house.hp.consumption[i]
+                    house.base_data[i]
+                    + house.pv.consumption[i]
+                    + house.hp.consumption[i]
                 )
 
                 logger.debug(f"Base load house: {house_base_load:.2f} kW")
@@ -306,7 +348,9 @@ if __name__ == "__main__":
 
                     # always discharge the battery
                     else:
-                        house.batt.consumption[i] = max(-house_load, house.batt.minmax[0])
+                        house.batt.consumption[i] = max(
+                            -house_load, house.batt.minmax[0]
+                        )
                         logger.debug(
                             f"House {house.id} is discharging the house battery with {house.batt.consumption[i]:.2f} kW"
                         )
@@ -317,8 +361,12 @@ if __name__ == "__main__":
                 house_load += house.batt.consumption[i]
 
                 # make a plot of the consumption of each DER for house c.PLOT_HOUSE
-                if house.id == c.PLOT_HOUSE and i // 96 == c.PLOT_DAY:
-                    plot_data.loc[i % 96] = [
+                if (
+                    house.id == c.PLOT_HOUSE
+                    and (i // 96 >= c.PLOT_DAY)
+                    and (i // 96 < c.PLOT_DAY + c.PLOT_LEN)
+                ):
+                    plot_data.loc[i % (96 * c.PLOT_LEN)] = [
                         house.pv.consumption[i],
                         house.hp.consumption[i],
                         house.ev.consumption[i],
@@ -326,6 +374,7 @@ if __name__ == "__main__":
                         house.base_data[i],
                         house_load,
                         minmax_price_range[i % ts],
+                        bool(house.ev.session[i] + 1),
                     ]
 
             # (4) Response and update DERs for the determined power consumption

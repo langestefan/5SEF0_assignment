@@ -11,7 +11,7 @@ heat_capacity_water = 4182  # [J/kg.K]
 
 
 def check_capacity(batt, name: str, i: int, house_id: int):
-    """ Check if battery is too full or empty
+    """Check if battery is too full or empty
 
     :param batt: battery object
     :param name: name of battery
@@ -19,9 +19,7 @@ def check_capacity(batt, name: str, i: int, house_id: int):
     :param house_id: house id
     """
     # double check if house battery is too full or empty
-    if (0 > np.round(batt.energy, 4)) or (
-        np.round(batt.energy, 4) > batt.size
-    ):
+    if (0 > np.round(batt.energy, 4)) or (np.round(batt.energy, 4) > batt.size):
         delta = round(batt.energy - batt.size, 3)
         if delta > 0:
             str = "full"
@@ -30,7 +28,6 @@ def check_capacity(batt, name: str, i: int, house_id: int):
         logger.error(
             f"{name} batt too {str}: idx: {i} by amount: {delta} kWh for house: {house_id}"
         )
-
 
 
 def response(list_of_houses: list, i: int, T_ambient: float):
@@ -113,7 +110,6 @@ def response(list_of_houses: list, i: int, T_ambient: float):
 
         # BATT
         if house.ders[2] == 1:
-
             # double check if battery is too full or empty
             check_capacity(house.batt, "House", i, house.id)
 
