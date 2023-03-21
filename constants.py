@@ -8,13 +8,12 @@ import random
 
 # v2g = True:  EV can be charged and discharged
 v2g = False
-v2h = False
+v2h = True
 
 # if we use the home battery or not
+USE_FLEX_HEATING = True
 USE_HOME_BATTERY = True
-USE_FLEX_HEATING = False
-USE_FLEX_EV_CHARGING = False
-USE_FLEX_BATT_CHARGING = False
+USE_FLEX_BATT_CHARGING = True
 
 # off-peak ptu's of the day
 # 0 = 00:00-00:15, ..., 95 = 23:45-00:00
@@ -52,7 +51,7 @@ formatter = logging.Formatter(
 handler.setFormatter(formatter)
 
 # range safety constant (% of battery size)
-R_SAFETY = 0.5
+R_SAFETY = 0.7
 P_MAX_CHARGE = 0.5
 
 # how often we refresh the min/max scalar for the next 24 hours (in ptu's)
@@ -60,8 +59,9 @@ P_MAX_CHARGE = 0.5
 PTU_REFRESH_P_SCALAR_INT = 96
 
 # for plotting consumption data of a single house
-PLOT_HOUSE = random.randint(1, 101)  # house number, starting at 1
-PLOT_DAY = random.randint(0, 364)  # day of the year, starting at 0
+PLOT_HOUSE = 1  # random.randint(1, 100)  # house number, starting at 1
+PLOT_DAY = 115  # random.randint(0, 364)  # day of the year, starting at 0
+PLOT_LEN = 3  # plot duration in days
 
 # for p_scalar randomness
 P_SCALAR_PETURBANCE = 0.2

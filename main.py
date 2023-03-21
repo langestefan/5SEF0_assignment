@@ -192,18 +192,14 @@ def plot_loads(data: pd.DataFrame, title: str):
         facecolors="red",
     )
     # ax1[1].set_xlabel("Time [HH:MM]")
-    ax1[1].set_ylabel("EV Home")
+    ax1[1].set_ylabel("EV@H")
     ax1[1].set_yticks([])
-    # ax1[1].set_xticks(range(0, 96 * (c.PLOT_LEN + 1) + 1, 48))
-    # ax1[1].set_xticklabels(xticks)
-    # disable xticks
     ax1[1].set_xticks([])
-                    
+
     # save the plot
-    # fig.tight_layout()
     save_path = os.path.join(c.sim_path, f"{title}.png")
     logger.info(f"Saving plot to {save_path}")
-    fig.savefig(save_path, dpi=300, bbox_inches="tight", pad_inches=0.1)
+    fig.savefig(save_path, dpi=300, bbox_inches="tight", pad_inches=0.2)
     plt.close(fig)
 
 
@@ -302,22 +298,21 @@ if __name__ == "__main__":
 
                 logger.debug(f"Base load house: {house_base_load:.2f} kW")
 
-                # if we use flex charging we charge based on the price
-                if c.USE_FLEX_EV_CHARGING:
-                    p_min, p_max, p_ev = get_opt_cons(house.ev, p_scaler)
-                # no flex charging, so we charge the EV with maximum power
+                # surplus power available for charging the EV (from PV)
+                if house_base_load <= 0:
+                    p_surplus = min(-house_base_load, house.ev.minmax[1])
                 else:
-                    p_ev = house.ev.minmax[1]
+                    p_surplus = 0
 
-                # if we use v2h we can discharge the EV
-                if v2h:
-                    # we only discharge if there is a positive house load
-                    if house_base_load > 0:
-                        p_ev = max(p_ev, -house_base_load)
-                    else:
-                        p_ev = max(p_ev, 0)
-                # no v2h, so we can only charge the EV
-                else:
+                # we charge extra based on the price
+                p_ev_min, p_ev_max, p_ev_opt = get_opt_cons(house.ev, -np.cos(p_scaler) + 1)
+
+                # calculate the actual EV consumption
+                p_ev_grid = max(p_ev_opt - p_surplus, 0)
+                p_ev = min(p_surplus + p_ev_grid, p_ev_max)
+
+                # if we don't use v2h we can't discharge the EV
+                if not v2h:
                     p_ev = max(p_ev, 0)
 
                 house.ev.consumption[i] = p_ev
