@@ -285,19 +285,21 @@ if __name__ == "__main__":
                 # add the EV consumption to the base load
                 house_load = house_base_load + house.ev.consumption[i]
 
+                # # home battery logic # #
                 if c.USE_HOME_BATTERY:
                     # always charge the battery if we have a negative house load
                     if house_load <= 0:
-                        p_solar = min(-house_load, house.batt.minmax[1])
+                        # if house_load is negative we charge at -house_load
+                        p_surplus = min(-house_load, house.batt.minmax[1])
 
                         # if we use flex charging we charge extra based on the price
                         p_grid = 0
                         p_max = house.batt.minmax[1]
                         if c.USE_FLEX_BATT_CHARGING:
                             p_max = house.batt.minmax[1]
-                            p_grid = (p_max - p_solar) * (-np.cos(p_scaler) + 1)
+                            p_grid = (p_max - p_surplus) * (-np.cos(p_scaler) + 1)
 
-                        house.batt.consumption[i] = min(p_solar + p_grid, p_max)
+                        house.batt.consumption[i] = min(p_surplus + p_grid, p_max)
                         logger.debug(
                             f"House {house.id} is charging the house battery with {house.batt.consumption[i]:.2f} kW"
                         )
@@ -310,7 +312,7 @@ if __name__ == "__main__":
                         )
                 else:
                     house.batt.consumption[i] = 0
-  
+
                 # update house_load with the battery consumption
                 house_load += house.batt.consumption[i]
 
