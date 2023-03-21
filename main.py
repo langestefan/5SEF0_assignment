@@ -140,16 +140,44 @@ def plot_loads(data: pd.DataFrame, title: str):
 
     # plot the consumption of each DER price on twinx
     fig, ax1 = plt.subplots(2, 1, gridspec_kw={'height_ratios': [14, 1]})
-    ax1[0].plot(data["pv"], label="PV", color="green")
-    ax1[0].plot(data["hp"], label="HP", color="red")
-    ax1[0].plot(data["ev"], label="EV", color="blue")
-    ax1[0].plot(data["batt"], label="Batt", color="purple")
-    ax1[0].plot(data["appl"], label="Appl", color="grey")
-    ax1[0].plot(data["house_total"], label="Total", color="black")
+
+    # stackplot of the consumption
+    neg_data = data[data < 0].fillna(0)
+    pos_data = data[data >= 0].fillna(0)
+
+    # positive stackplot
+    ax1[0].stackplot(
+        data.index,
+        pos_data["pv"],
+        pos_data["hp"],
+        pos_data["appl"],
+        pos_data["ev"],
+        pos_data["batt"],
+        labels=["PV", "HP", "Appl", "EV", "Batt"],
+        colors=["green", "red", "grey", "blue", "purple"],
+    )
+    # negative stackplot
+    ax1[0].stackplot(
+        data.index,
+        neg_data["pv"],
+        neg_data["hp"],
+        neg_data["appl"],
+        neg_data["ev"],
+        neg_data["batt"],
+        colors=["green", "red", "grey", "blue", "purple"],
+    )
+    # total consumption
+    ax1[0].plot(data.index, data["house_total"], label="Total", color="black")
+
+
+
+
     ax1[0].set_xlabel("Time [HH:MM]")
     ax1[0].set_ylabel("Power [kW]")
     ax1[0].set_title(title)
     ax1[0].legend(loc="upper left", ncol=3)
+    ax1[0].set_zorder(10)
+    ax1[0].patch.set_visible(False)
 
     # bar plot for the price
     ax2 = ax1[0].twinx()
@@ -371,6 +399,8 @@ if __name__ == "__main__":
                         minmax_price_range[i % ts],
                         bool(house.ev.session[i] + 1),
                     ]
+                    # set dtype to float for df[:-1]
+                    plot_data = plot_data.astype(float)
 
             # (4) Response and update DERs for the determined power consumption
             total_load[i] = response.response(list_of_houses, i, temperature_data[i])
