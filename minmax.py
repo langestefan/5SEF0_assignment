@@ -52,6 +52,8 @@ def determine_v2hg_limits(house: House, i: int):
     )
 
     # we must charge to reach the required SOC
+    delta_energy = np.round(delta_energy + 0.1, 1)
+
     if delta_energy >= 0:
         logger.debug(f"EV delta energy = {delta_energy:.2f} >= 0, we must charge")
 
@@ -138,7 +140,9 @@ def limit_batt(house: House):
 
     # max charging power (either what is left to fully charge battery or max charge power), this value is positive
     charge_power = min((house.batt.size - house.batt.energy) * 4, house.batt.power_max)
-    logger.debug(f"Batt [min, max] power: [{round(dis_power, 2)}, {round(charge_power, 2)}]")
+    logger.debug(
+        f"Batt [min, max] power: [{round(dis_power, 2)}, {round(charge_power, 2)}]"
+    )
     house.batt.minmax = [dis_power, charge_power]
 
 
