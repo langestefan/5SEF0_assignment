@@ -52,7 +52,7 @@ def determine_v2hg_limits(house: House, i: int):
     )
 
     # we must charge to reach the required SOC
-    delta_energy = np.round(delta_energy + 0.1, 1)
+    delta_energy = np.round(delta_energy + 0.15, 1)
 
     if delta_energy >= 0:
         logger.debug(f"EV delta energy = {delta_energy:.2f} >= 0, we must charge")
