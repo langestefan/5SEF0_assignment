@@ -70,7 +70,8 @@ def ptu_to_hhmm(ptu: int):
     :param ptu: ptu to convert
     :return: string in the format hh:mm
     """
-    hour = ptu // 4
+    day = ptu // 96
+    hour = ptu // 4 - day * 24
     if hour > 23:
         hour -= 24
     minute = (ptu % 4) * 15
@@ -183,9 +184,8 @@ def plot_loads(data: pd.DataFrame, title: str):
     ax2.legend(loc="upper right")
 
     # set the xticks to the correct time
-    xticks = [ptu_to_hhmm(i) for i in range(0, 96 + 1, 48)] * c.PLOT_LEN
-    print(xticks)
-    ax1[0].set_xticks(range(0, 96 * (c.PLOT_LEN + 1) + 1, 48))
+    xticks = [ptu_to_hhmm(i) for i in range(0, 96 * c.PLOT_LEN + 1, 48)]
+    ax1[0].set_xticks(range(0, 96 * c.PLOT_LEN + 1, 48))
     ax1[0].set_xticklabels(xticks)
 
     # yticks to integer values
@@ -331,14 +331,12 @@ if __name__ == "__main__":
                     p_surplus = max(min(-house_base_load, house.ev.minmax[1]), 0)
 
                     # compute sum of all powers and scale it with p_scaler
-                    p_ev = p_ev_min + (p_ev_max - p_surplus - p_ev_min) * (
-                        -np.cos(p_scaler) + 1
-                    )
+                    p_ev = p_ev_min + (p_ev_max - p_surplus - p_ev_min) * (-np.cos(p_scaler) + 1) / 4
                     p_ev = max(p_ev, 0)
 
                 else:
                     # compute sum of all powers and scale it with p_scaler
-                    p_ev = p_ev_min + (p_ev_max - p_ev_min) * (-np.cos(p_scaler) + 1)
+                    p_ev = p_ev_min + (p_ev_max - p_ev_min) * (-np.cos(p_scaler) + 1) / 4
 
                     # if p_ev is negative it can never be smaller than house_base_load
                     if p_ev < 0:
