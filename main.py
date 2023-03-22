@@ -331,12 +331,12 @@ if __name__ == "__main__":
                     p_surplus = max(min(-house_base_load, house.ev.minmax[1]), 0)
 
                     # compute sum of all powers and scale it with p_scaler
-                    p_ev = p_ev_min + (p_ev_max - p_surplus - p_ev_min) * (-np.cos(p_scaler) + 1) / 4
+                    p_ev = p_ev_min + (p_ev_max - p_surplus - p_ev_min) * (-np.cos(p_scaler) + 1) / 2
                     p_ev = max(p_ev, 0)
 
                 else:
                     # compute sum of all powers and scale it with p_scaler
-                    p_ev = p_ev_min + (p_ev_max - p_ev_min) * (-np.cos(p_scaler) + 1) / 4
+                    p_ev = p_ev_min + (p_ev_max - p_ev_min) * (-np.cos(p_scaler) + 1) / 2
 
                     # if p_ev is negative it can never be smaller than house_base_load
                     if p_ev < 0:
@@ -368,18 +368,30 @@ if __name__ == "__main__":
                         p_max = house.batt.minmax[1]
                         if c.USE_FLEX_BATT_CHARGING:
                             p_max = house.batt.minmax[1]
-                            p_grid = (p_max - p_surplus) * (-np.cos(p_scaler) + 1)
+                            p_grid = (p_max - p_surplus) * (-2 * np.cos(p_scaler) + 2)
 
                         house.batt.consumption[i] = min(p_surplus + p_grid, p_max)
                         logger.debug(
                             f"House {house.id} is charging the house battery with {house.batt.consumption[i]:.2f} kW"
                         )
 
-                    # always discharge the battery
+                    # charge/discharge the battery
                     else:
-                        house.batt.consumption[i] = max(
-                            -house_load, house.batt.minmax[0]
-                        )
+
+                        # discharge power
+                        p_dis_b = house.batt.minmax[0]
+
+                        if c.USE_FLEX_BATT_CHARGING:
+                            p_ch_b = house.batt.minmax[1]
+                            p_b = p_dis_b + (p_ch_b - p_dis_b) * (-2 * np.cos(p_scaler) + 2)
+                        else:
+                            p_b = p_dis_b
+
+                        # if p_b is negative it can never be smaller than house_load
+                        p_b = max(p_b, -house_load)
+                        
+                        # set the house battery consumption
+                        house.batt.consumption[i] = p_b
                         logger.debug(
                             f"House {house.id} is discharging the house battery with {house.batt.consumption[i]:.2f} kW"
                         )
