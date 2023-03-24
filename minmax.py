@@ -41,18 +41,21 @@ def determine_v2hg_limits(house: House, i: int):
     trip_energy = house.ev.session_trip_energy[session]
     safety_energy = c.R_SAFETY * max_energy
     required_energy = max(trip_energy, safety_energy)
-    # TODO: consider setting required_energy = house.ev.size
 
-    # delta energy is the energy we need to charge or discharge to reach the required SOC
-    delta_energy = required_energy - current_energy
+    # house 40 and 83 always require 100% SOC
+    if house.id == 40 or house.id == 83:
+        required_energy = max_energy
+        delta_energy = required_energy - current_energy
+    # add a little bit of safety margin to the required energy for the other houses
+    else:
+        delta_energy = required_energy - current_energy
+        delta_energy = np.round(delta_energy + 0.15, 1)
 
     logger.debug(
         f"EV [trip: {trip_energy:.2f}], [safety: {safety_energy:.2f}], [current: {current_energy:.2f}], "
         f"[required: {required_energy:.2f}], [delta: {delta_energy:.2f}], [to max: {energy_to_max:.2f}]"
     )
 
-    # we must charge to reach the required SOC
-    delta_energy = np.round(delta_energy + 0.15, 1)
 
     if delta_energy >= 0:
         logger.debug(f"EV delta energy = {delta_energy:.2f} >= 0, we must charge")
