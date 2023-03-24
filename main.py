@@ -94,40 +94,78 @@ def exp_filter(x: np.array, alpha: float = 0.3):
 
 
 def get_min_max_range(
-    price_data: np.array,
-    minmax_price_range: np.array,
+    p_data: np.array,
+    minmax_range: np.array,
     eps: float = 1e-6,
     filter: bool = True,
 ):
     """
-    Determine the min and max price range for the next 24 hours
+    Determine the min and max p_scaler range for the next 24 hours
 
-    This is essentially normalizing the inverted price data to the range [0, 1]
+    This is essentially normalizing the inverted data to the range [0, 1]
 
-    :param price_data: array with day-ahead prices
-    :param minmax_price_range: array with current normalized price range
+    :param p_data: array with price/consumption data
+    :param minmax_range: array with current normalized price range
     :param eps: epsilon to avoid division by zero
     :return: normalized price data
     """
     # invert the price data
-    price_data = -price_data
-    min_price = np.min(price_data)
-    max_price = np.max(price_data)
+    p_data = -p_data
+    min_price = np.min(p_data)
+    max_price = np.max(p_data)
 
     # normalize the price data to the range [0, 1] and return
-    norm = (price_data - min_price) / (max_price - min_price + eps)
-    minmax_price_range[: len(norm)] = norm
+    norm = (p_data - min_price) / (max_price - min_price + eps)
+    minmax_range[: len(norm)] = norm
 
     # apply an exponential filter to p_scaler
     if filter:
-        minmax_price_range = exp_filter(minmax_price_range)
+        minmax_range = exp_filter(minmax_range)
 
-    return minmax_price_range
+    return minmax_range
+
+
+def get_cons_forecast(
+    cons_data: np.array,
+    n_ptu_fc: int = 16,
+    n_window: int = 96,
+):
+    """
+    Forecast the consumption of the next 24 hours, based on the last 24 hours
+    Then normalize the consumption data to the range [0, 1]
+
+    :param cons_data: array with historical consumption data up to t-1 (length = 96)
+    :param alpha: filter parameter, higher alpha = more weight on recent data
+    :param n_ptu_fc: number of ptu's to forecast
+    :return: normalized p_scaler
+    """
+    # array to hold forecasted data
+    p_fc = np.zeros(n_ptu_fc)
+    # logger.info(f"Forecast shape = {p_fc.shape}")
+
+    # weights for the moving average
+    weights = np.arange(1, n_window + 1)
+    sum_weights = np.sum(weights)
+    # logger.info(f"Weights = {weights}, sum = {sum_weights}")
+    logger.info(f"Old cons_data = \n{np.round(cons_data, 2)}")
+
+    # forecast the consumption of the next n_ptu_fc ptu's
+    for i in range(n_ptu_fc):
+        # calculate the moving average of the last n_window ptu's
+        p_fc[i] = np.dot(cons_data[-n_window:], weights) / sum_weights
+        # logger.info(f"Forecasted = {p_fc[i]:.2f} kW")
+
+    # add the forecasted consumption to the array
+    cons_data = np.roll(cons_data, -n_ptu_fc)
+    cons_data[-n_ptu_fc:] = p_fc
+    logger.info(f"New cons_data = \n{np.round(cons_data, 2)}")
+
+    return cons_data
 
 
 def plot_loads(data: pd.DataFrame, title: str):
     """
-    Plot consumption of each DER for a single house for 24 hours (96 ptu's)
+    Plot consumption of each DER for a single house
 
     :param house: house to plot (index in list_of_houses)
     :param data: DataFrame with consumption data + normalized price data
@@ -246,8 +284,12 @@ if __name__ == "__main__":
     t_start = time.time()
 
     # normalized prices to do congestion based charging
-    ts = c.PTU_REFRESH_P_SCALAR_INT
-    minmax_price_range = np.ones(96)
+    ts = c.PSCALER_PRICE_INT
+    ts_cons = c.PSCALER_CONS_INT
+    n_window_cons = c.CONS_WINDOW
+    minmax_range = np.ones(96 + c.PSCALER_PRICE_OVERLAP)
+    minmax_range_price = np.ones(96 + c.PSCALER_PRICE_OVERLAP)
+    minmax_range_cons = np.ones(96 + c.PSCALER_PRICE_OVERLAP)
 
     # empty df for ploting consumption data
     plot_data = pd.DataFrame(
@@ -274,15 +316,36 @@ if __name__ == "__main__":
             day_ahead_price = day_ahead_prices[i]
             logger.debug(f"Day-ahead price: {day_ahead_price} (EUR/MWh)")
 
-            # if we pass to the next day we need to determine the min and max price range for the next 24 hours
-            if i % ts == 0:
-                minmax_price_range = get_min_max_range(
-                    day_ahead_prices[i : i + 96],
-                    minmax_price_range,
+            # p_scaler by consumption update every ts_cons
+            if i % ts_cons == 0 and i > 96 - n_window_cons:
+                if c.USE_REAL_CONS:
+                    logger.info(f"Updating consumption forecast at: {i} = {ptu_to_hhmm(i)}")
+                    tot_load = total_load[i - 96 + n_window_cons : i]
+                    new_cons = get_cons_forecast(
+                        tot_load,
+                        n_ptu_fc=ts_cons,
+                        n_window=n_window_cons,
+                    )
+                    # get the new minmax_range based on the new consumption forecast
+                    minmax_range_cons = get_min_max_range(
+                        new_cons, minmax_range_cons.copy()
+                    )
+
+                    # set the new minmax_range
+                    minmax_range = (minmax_range_cons + minmax_range_price) / 2
+
+            # p_scaler by price update every ts
+            if i % ts == 0 and i > c.PSCALER_PRICE_OVERLAP:
+                minmax_range_price = get_min_max_range(
+                    day_ahead_prices[i - c.PSCALER_PRICE_OVERLAP: i + 96],
+                    minmax_range_price.copy(),
                 )
-                logger.debug(
-                    f"New min-max price range: \n{minmax_price_range} at: {ptu_to_hhmm(i%96)}"
-                )
+
+                # set the new minmax_range
+                if c.USE_REAL_CONS:
+                    minmax_range = (minmax_range_cons + minmax_range_price) / 2
+                else:
+                    minmax_range = minmax_range_price
 
             # loop over all houses
             for house in list_of_houses:
@@ -297,9 +360,7 @@ if __name__ == "__main__":
                 v2g = house.ev.v2g
 
                 # get the charging factor p_scaler for this timestep
-                p_scaler = minmax_price_range[i % ts]
-
-                # add a random peturbance to p_scaler
+                p_scaler = minmax_range[i % ts + c.PSCALER_PRICE_OVERLAP]
                 logger.debug(f"Current p_scaler: {p_scaler}")
 
                 # The PV wil always generate maximum power
@@ -331,12 +392,12 @@ if __name__ == "__main__":
                     p_surplus = max(min(-house_base_load, house.ev.minmax[1]), 0)
 
                     # compute sum of all powers and scale it with p_scaler
-                    p_ev = p_ev_min + (p_ev_max - p_surplus - p_ev_min) * (-np.cos(p_scaler) + 1) / 2
+                    p_ev = p_ev_min + (p_ev_max - p_surplus - p_ev_min) * (-np.cos(p_scaler) + 1) / 4
                     p_ev = max(p_ev, 0)
 
                 else:
                     # compute sum of all powers and scale it with p_scaler
-                    p_ev = p_ev_min + (p_ev_max - p_ev_min) * (-np.cos(p_scaler) + 1) / 2
+                    p_ev = p_ev_min + (p_ev_max - p_ev_min) * (-np.cos(p_scaler) + 1) / 4
 
                     # if p_ev is negative it can never be smaller than house_base_load
                     if p_ev < 0:
@@ -344,9 +405,11 @@ if __name__ == "__main__":
                             p_ev = max(p_ev, -house_base_load, house.ev.minmax[0])
                         else:
                             p_ev = 0
-                
-                logger.debug(f"[EV]min: {p_ev_min:.2f} kW, max: {p_ev_max:.2f} kW,"
-                             f"act: {p_ev:.2f} kW, surplus: {p_surplus:.2f} kW")
+
+                logger.debug(
+                    f"[EV]min: {p_ev_min:.2f} kW, max: {p_ev_max:.2f} kW,"
+                    f"act: {p_ev:.2f} kW, surplus: {p_surplus:.2f} kW"
+                )
 
                 house.ev.consumption[i] = p_ev
 
@@ -368,7 +431,7 @@ if __name__ == "__main__":
                         p_max = house.batt.minmax[1]
                         if c.USE_FLEX_BATT_CHARGING:
                             p_max = house.batt.minmax[1]
-                            p_grid = (p_max - p_surplus) * (-2 * np.cos(p_scaler) + 2)
+                            p_grid = (p_max - p_surplus) * (-np.cos(p_scaler) + 1) / 2
 
                         house.batt.consumption[i] = min(p_surplus + p_grid, p_max)
                         logger.debug(
@@ -377,19 +440,18 @@ if __name__ == "__main__":
 
                     # charge/discharge the battery
                     else:
-
                         # discharge power
                         p_dis_b = house.batt.minmax[0]
 
                         if c.USE_FLEX_BATT_CHARGING:
                             p_ch_b = house.batt.minmax[1]
-                            p_b = p_dis_b + (p_ch_b - p_dis_b) * (-2 * np.cos(p_scaler) + 2)
+                            p_b = p_dis_b + (p_ch_b - p_dis_b) * (-np.cos(p_scaler) + 1) / 2
                         else:
                             p_b = p_dis_b
 
                         # if p_b is negative it can never be smaller than house_load
                         p_b = max(p_b, -house_load)
-                        
+
                         # set the house battery consumption
                         house.batt.consumption[i] = p_b
                         logger.debug(
@@ -414,7 +476,7 @@ if __name__ == "__main__":
                         house.batt.consumption[i],
                         house.base_data[i],
                         house_load,
-                        minmax_price_range[i % ts],
+                        minmax_range[i % ts],
                         bool(house.ev.session[i] + 1),
                     ]
                     # set dtype to float for df[:-1]
