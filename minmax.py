@@ -56,7 +56,6 @@ def determine_v2hg_limits(house: House, i: int):
         f"[required: {required_energy:.2f}], [delta: {delta_energy:.2f}], [to max: {energy_to_max:.2f}]"
     )
 
-
     if delta_energy >= 0:
         logger.debug(f"EV delta energy = {delta_energy:.2f} >= 0, we must charge")
 

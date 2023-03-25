@@ -59,16 +59,16 @@ R_SAFETY = 0.7
 PSCALER_PRICE_INT = 96
 
 # PTU's of overlap between two consecutive price interval windows
-PSCALER_PRICE_OVERLAP = 24
-PSCALER_CONS_INT = 16
-CONS_WINDOW = 24
+PSCALER_PRICE_OVERLAP = 96
+PSCALER_CONS_INT = 8
+CONS_WINDOW = 48
 
 # if we use real time consumption data or not
 USE_REAL_CONS = False
 
 # for plotting consumption data of a single house
 PLOT_HOUSE = 1  # random.randint(1, 100)  # house number, starting at 1
-PLOT_DAY = 10  # random.randint(0, 364)  # day of the year, starting at 0
+PLOT_DAY = 355  # random.randint(0, 364)  # day of the year, starting at 0
 PLOT_LEN = 3  # plot duration in days
 
 # for p_scalar randomness
@@ -77,4 +77,4 @@ np.random.seed(42)
 pert = np.random.normal(0, P_SCALAR_PETURBANCE, 100)
 
 # number of houses to simulate
-N_HOUSES = 1
+N_HOUSES = 100

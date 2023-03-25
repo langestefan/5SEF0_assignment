@@ -88,16 +88,33 @@ def exp_filter(x: np.array, alpha: float = 0.3):
     """
     y = np.zeros_like(x)
     y[0] = x[0]
+    coeff = 1 - alpha
     for i in range(1, len(x)):
-        y[i] = alpha * x[i] + (1 - alpha) * y[i - 1]
+        y[i] = alpha * x[i] + coeff * y[i - 1]
     return y
+
+
+def wma(x: np.array, n: int = 4, step: bool = False):
+    """
+    Apply a weighted moving average filter to the data
+
+    :param x: data to filter
+    :param n: filter parameter
+    :return: filtered data
+    """
+    if step:
+        weights = np.arange(1, n + 1)
+    else:
+        weights = np.ones(n)
+
+    sum_weights = np.sum(weights)
+    return np.convolve(x, weights, mode="same") / sum_weights
 
 
 def get_min_max_range(
     p_data: np.array,
-    minmax_range: np.array,
     eps: float = 1e-6,
-    filter: bool = True,
+    filter: str = '',
 ):
     """
     Determine the min and max p_scaler range for the next 24 hours
@@ -116,13 +133,14 @@ def get_min_max_range(
 
     # normalize the price data to the range [0, 1] and return
     norm = (p_data - min_price) / (max_price - min_price + eps)
-    minmax_range[: len(norm)] = norm
 
-    # apply an exponential filter to p_scaler
-    if filter:
-        minmax_range = exp_filter(minmax_range)
+    # apply a filter to p_scaler if desired
+    if filter == 'exp':
+        norm = exp_filter(norm)
+    elif filter == 'wma':
+        norm = wma(norm, n=4, step=True)
 
-    return minmax_range
+    return norm
 
 
 def get_cons_forecast(
@@ -141,24 +159,15 @@ def get_cons_forecast(
     """
     # array to hold forecasted data
     p_fc = np.zeros(n_ptu_fc)
-    # logger.info(f"Forecast shape = {p_fc.shape}")
-
-    # weights for the moving average
-    weights = np.arange(1, n_window + 1)
-    sum_weights = np.sum(weights)
-    # logger.info(f"Weights = {weights}, sum = {sum_weights}")
-    logger.info(f"Old cons_data = \n{np.round(cons_data, 2)}")
 
     # forecast the consumption of the next n_ptu_fc ptu's
     for i in range(n_ptu_fc):
         # calculate the moving average of the last n_window ptu's
-        p_fc[i] = np.dot(cons_data[-n_window:], weights) / sum_weights
-        # logger.info(f"Forecasted = {p_fc[i]:.2f} kW")
+        p_fc[i] = wma(cons_data[-n_window:], n=n_window, step=True)[-1]
 
-    # add the forecasted consumption to the array
-    cons_data = np.roll(cons_data, -n_ptu_fc)
-    cons_data[-n_ptu_fc:] = p_fc
-    logger.info(f"New cons_data = \n{np.round(cons_data, 2)}")
+        # add the forecasted consumption to the array
+        cons_data = np.roll(cons_data, -1)
+        cons_data[-1] = p_fc[i]
 
     return cons_data
 
@@ -287,9 +296,10 @@ if __name__ == "__main__":
     ts = c.PSCALER_PRICE_INT
     ts_cons = c.PSCALER_CONS_INT
     n_window_cons = c.CONS_WINDOW
-    minmax_range = np.ones(96 + c.PSCALER_PRICE_OVERLAP)
-    minmax_range_price = np.ones(96 + c.PSCALER_PRICE_OVERLAP)
-    minmax_range_cons = np.ones(96 + c.PSCALER_PRICE_OVERLAP)
+    price_over = 0  # start with overlap of 0
+    minmax_range = np.ones(sim_length)
+    minmax_range_price = np.ones(sim_length)
+    minmax_range_cons = np.ones(sim_length)
 
     # empty df for ploting consumption data
     plot_data = pd.DataFrame(
@@ -317,35 +327,41 @@ if __name__ == "__main__":
             logger.debug(f"Day-ahead price: {day_ahead_price} (EUR/MWh)")
 
             # p_scaler by consumption update every ts_cons
-            if i % ts_cons == 0 and i > 96 - n_window_cons:
-                if c.USE_REAL_CONS:
-                    logger.info(f"Updating consumption forecast at: {i} = {ptu_to_hhmm(i)}")
-                    tot_load = total_load[i - 96 + n_window_cons : i]
+            if c.USE_REAL_CONS:
+                if i % ts_cons == 0 and i > 95:
+                    # logger.info(f"Updating cons forecast at [i={i}] = [{ptu_to_hhmm(i)}]")
+                    # get the consumption history of the last 24h
+                    hist_load = total_load[i - 96 : i]
+
+                    # forecast the consumption for the next t_cons timesteps
                     new_cons = get_cons_forecast(
-                        tot_load,
-                        n_ptu_fc=ts_cons,
-                        n_window=n_window_cons,
-                    )
-                    # get the new minmax_range based on the new consumption forecast
-                    minmax_range_cons = get_min_max_range(
-                        new_cons, minmax_range_cons.copy()
+                        hist_load, n_ptu_fc=ts_cons, n_window=n_window_cons
                     )
 
-                    # set the new minmax_range
-                    minmax_range = (minmax_range_cons + minmax_range_price) / 2
+                    # get the new minmax_range based on the new consumption forecast
+                    p_sc_arr = get_min_max_range(new_cons, filter='wma')
+
+                    # add the new p_sc_arr to the main minmax array
+                    minmax_range_cons[i - 96 + ts_cons: i + ts_cons] = p_sc_arr
+
+                    # run moving average over the new minmax_range_cons
+                    wma_out = wma(minmax_range_cons[i - 4: i + ts_cons], 4)
+                    minmax_range_cons[i - 4: i + ts_cons] = wma_out
 
             # p_scaler by price update every ts
-            if i % ts == 0 and i > c.PSCALER_PRICE_OVERLAP:
-                minmax_range_price = get_min_max_range(
-                    day_ahead_prices[i - c.PSCALER_PRICE_OVERLAP: i + 96],
-                    minmax_range_price.copy(),
-                )
+            if i % ts == 0:
+                # get the new minmax_range based on the day-ahead price of this timestep + 96 (1d ahead)
+                prices = day_ahead_prices[i - price_over : i + ts]
+                p_sc_arr = get_min_max_range(prices, filter='exp')
 
-                # set the new minmax_range
-                if c.USE_REAL_CONS:
-                    minmax_range = (minmax_range_cons + minmax_range_price) / 2
-                else:
-                    minmax_range = minmax_range_price
+                # add the new minmax_range to the main array
+                minmax_range_price[i : i + ts] = p_sc_arr[price_over : price_over + ts]
+
+            # before i == c.PSCALER_PRICE_OVERLAP we dont have enough overlapping data
+            # set the new overlap on i == c.PSCALER_PRICE_OVERLAP
+            if i == c.PSCALER_PRICE_OVERLAP:
+                price_over = c.PSCALER_PRICE_OVERLAP
+                logger.info(f"Setting price overlap to: {price_over}")
 
             # loop over all houses
             for house in list_of_houses:
@@ -359,8 +375,12 @@ if __name__ == "__main__":
                 v2h = house.ev.v2h
                 v2g = house.ev.v2g
 
-                # get the charging factor p_scaler for this timestep
-                p_scaler = minmax_range[i % ts + c.PSCALER_PRICE_OVERLAP]
+                # update p_scaler
+                if c.USE_REAL_CONS:
+                    p_scaler = minmax_range_cons[i]
+                else:
+                    p_scaler = minmax_range_price[i]
+
                 logger.debug(f"Current p_scaler: {p_scaler}")
 
                 # The PV wil always generate maximum power
@@ -392,12 +412,19 @@ if __name__ == "__main__":
                     p_surplus = max(min(-house_base_load, house.ev.minmax[1]), 0)
 
                     # compute sum of all powers and scale it with p_scaler
-                    p_ev = p_ev_min + (p_ev_max - p_surplus - p_ev_min) * (-np.cos(p_scaler) + 1) / 4
+                    p_ev = (
+                        p_ev_min
+                        + (p_ev_max - p_surplus - p_ev_min)
+                        * (-np.cos(p_scaler) + 1)
+                        / 4
+                    )
                     p_ev = max(p_ev, 0)
 
                 else:
                     # compute sum of all powers and scale it with p_scaler
-                    p_ev = p_ev_min + (p_ev_max - p_ev_min) * (-np.cos(p_scaler) + 1) / 4
+                    p_ev = (
+                        p_ev_min + (p_ev_max - p_ev_min) * (-np.cos(p_scaler) + 1) / 4
+                    )
 
                     # if p_ev is negative it can never be smaller than house_base_load
                     if p_ev < 0:
@@ -445,7 +472,10 @@ if __name__ == "__main__":
 
                         if c.USE_FLEX_BATT_CHARGING:
                             p_ch_b = house.batt.minmax[1]
-                            p_b = p_dis_b + (p_ch_b - p_dis_b) * (-np.cos(p_scaler) + 1) / 2
+                            p_b = (
+                                p_dis_b
+                                + (p_ch_b - p_dis_b) * (-np.cos(p_scaler) + 1) / 2
+                            )
                         else:
                             p_b = p_dis_b
 
@@ -476,7 +506,7 @@ if __name__ == "__main__":
                         house.batt.consumption[i],
                         house.base_data[i],
                         house_load,
-                        minmax_range[i % ts],
+                        p_scaler,
                         bool(house.ev.session[i] + 1),
                     ]
                     # set dtype to float for df[:-1]
