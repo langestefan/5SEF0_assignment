@@ -46,23 +46,6 @@ number_of_houses = c.N_HOUSES
 total_load = np.zeros(sim_length)
 
 
-def off_peak_ptu(i: int):
-    """
-    Determine whether we are in a charging PTU or not
-
-    :param i: timestep
-    :return: boolean, True if we are in a charging PTU
-    """
-    # determine if we are in a workday or weekend
-    ptu_in_day = i % 96
-    weekday = (i // 96) % 7
-    weekend = weekday > 4  # days 5 and 6 are weekend
-
-    # determine if we are in a off-peak PTU depending on the day of the week/ptu in the day
-    charge_session = c.off_peak_we if weekend else c.off_peak_wd
-    return (ptu_in_day >= charge_session[0]) and (ptu_in_day < charge_session[1])
-
-
 def ptu_to_hhmm(ptu: int):
     """
     Convert a ptu to a string in the format hh:mm
@@ -114,7 +97,7 @@ def wma(x: np.array, n: int = 4, step: bool = False):
 def get_min_max_range(
     p_data: np.array,
     eps: float = 1e-6,
-    filter: str = '',
+    filter: str = "",
 ):
     """
     Determine the min and max p_scaler range for the next 24 hours
@@ -135,9 +118,9 @@ def get_min_max_range(
     norm = (p_data - min_price) / (max_price - min_price + eps)
 
     # apply a filter to p_scaler if desired
-    if filter == 'exp':
+    if filter == "exp":
         norm = exp_filter(norm)
-    elif filter == 'wma':
+    elif filter == "wma":
         norm = wma(norm, n=4, step=True)
 
     return norm
@@ -335,24 +318,32 @@ if __name__ == "__main__":
 
                     # forecast the consumption for the next t_cons timesteps
                     new_cons = get_cons_forecast(
-                        hist_load, n_ptu_fc=ts_cons, n_window=n_window_cons
+                        hist_load.copy(), n_ptu_fc=ts_cons, n_window=n_window_cons
                     )
 
-                    # get the new minmax_range based on the new consumption forecast
-                    p_sc_arr = get_min_max_range(new_cons, filter='wma')
+                    # get cons_fc from new_cons
+                    mu_cons_fc = np.mean(new_cons[-ts_cons:])
+                    mu_cons_hist = np.mean(hist_load[-ts_cons:])
+
+                    if mu_cons_fc > mu_cons_hist:
+                        # if the forecast is higher than the history, decrease p_scalar
+                        p_sc = -2 * np.ones_like(mu_cons_fc)
+                    else:
+                        # if the forecast is lower than the history, increase p_scalar
+                        p_sc = 2 * np.ones_like(mu_cons_fc)
 
                     # add the new p_sc_arr to the main minmax array
-                    minmax_range_cons[i - 96 + ts_cons: i + ts_cons] = p_sc_arr
+                    minmax_range_cons[i : i + ts_cons] = p_sc
 
                     # run moving average over the new minmax_range_cons
-                    wma_out = wma(minmax_range_cons[i - 4: i + ts_cons], 4)
-                    minmax_range_cons[i - 4: i + ts_cons] = wma_out
+                    wma_out = wma(minmax_range_cons[i - 8 : i + ts_cons], 4)
+                    minmax_range_cons[i - 8 : i + ts_cons] = wma_out
 
             # p_scaler by price update every ts
             if i % ts == 0:
                 # get the new minmax_range based on the day-ahead price of this timestep + 96 (1d ahead)
                 prices = day_ahead_prices[i - price_over : i + ts]
-                p_sc_arr = get_min_max_range(prices, filter='exp')
+                p_sc_arr = get_min_max_range(prices, filter="exp")
 
                 # add the new minmax_range to the main array
                 minmax_range_price[i : i + ts] = p_sc_arr[price_over : price_over + ts]
@@ -366,7 +357,7 @@ if __name__ == "__main__":
             # loop over all houses
             for house in list_of_houses:
                 logger.debug(
-                    f" --- House: {house.id} at timestep: {i} (off-peak: {off_peak_ptu(i)}, time[HH:MM]: {i%96*15//60:02}:{i%96*15%60:02}), weekday: {i//96%7} --- "
+                    f" --- House: {house.id} at timestep: {i}, time[HH:MM]: {i%96*15//60:02}:{i%96*15%60:02}), weekday: {i//96%7} --- "
                 )
 
                 # (3) now we determine the actual consumption of each DER
@@ -377,7 +368,12 @@ if __name__ == "__main__":
 
                 # update p_scaler
                 if c.USE_REAL_CONS:
-                    p_scaler = minmax_range_cons[i]
+                    cons = minmax_range_cons[i]
+                    price = minmax_range_price[i]
+                    p_scaler = np.clip(price * (cons + 10) / 10, 0, 1)
+                    logger.debug(
+                        f"[i={i}] p_scaler: {p_scaler}, [cons={cons}, price={price}]"
+                    )
                 else:
                     p_scaler = minmax_range_price[i]
 
@@ -573,6 +569,16 @@ def renewables():
     logger.info(f"Renewable Share: {renewable_percentage}")
 
 
+def save_data():
+    """
+    Save the total load of the simulation to a .npy file.
+    """
+    title_data = "total_load"
+    save_path = os.path.join(c.sim_path, f"{title_data}.npy")
+    np.save(save_path, total_load)
+
+
 # display results
 plot_grid()
 renewables()
+save_data()
