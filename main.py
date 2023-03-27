@@ -180,22 +180,21 @@ def plot_loads(data: pd.DataFrame, title: str):
     ax1[0].stackplot(
         data.index,
         pos_data["pv"],
-        pos_data["hp"],
         pos_data["appl"],
+        pos_data["hp"],
         pos_data["ev"],
         pos_data["batt"],
-        labels=["PV", "HP", "Appl", "EV", "Batt"],
-        colors=["green", "red", "grey", "blue", "purple"],
+        labels=["PV", "Appl", "HP", "EV", "Battery"],
+        colors=["green", "grey", "red", "blue", "purple"],
     )
     # negative stackplot
     ax1[0].stackplot(
         data.index,
         neg_data["pv"],
         neg_data["hp"],
-        neg_data["appl"],
         neg_data["ev"],
         neg_data["batt"],
-        colors=["green", "red", "grey", "blue", "purple"],
+        colors=["green", "red", "blue", "purple"],
     )
     # total consumption
     ax1[0].plot(data.index, data["house_total"], label="Total", color="black")
@@ -207,9 +206,12 @@ def plot_loads(data: pd.DataFrame, title: str):
     ax1[0].set_zorder(10)
     ax1[0].patch.set_visible(False)
 
-    # bar plot for the price
+    # plot for p_scaler
     ax2 = ax1[0].twinx()
     ax2.bar(data.index, data["price"], label="p_scaler", color="orange", alpha=0.3)
+    # line with circles
+    # ax2.plot(data.index, data["price"], label="p_scaler", color="orange", marker="o", 
+    #          markeredgewidth=3, linewidth=2, markersize=7, alpha=0.3)
     ax2.set_ylabel("Norm. Charge Factor [0, 1]")
     ax2.legend(loc="upper right")
 
@@ -327,10 +329,10 @@ if __name__ == "__main__":
 
                     if mu_cons_fc > mu_cons_hist:
                         # if the forecast is higher than the history, decrease p_scalar
-                        p_sc = -2 * np.ones_like(mu_cons_fc)
+                        p_sc = -5 * np.ones_like(mu_cons_fc)
                     else:
                         # if the forecast is lower than the history, increase p_scalar
-                        p_sc = 2 * np.ones_like(mu_cons_fc)
+                        p_sc = 5 * np.ones_like(mu_cons_fc)
 
                     # add the new p_sc_arr to the main minmax array
                     minmax_range_cons[i : i + ts_cons] = p_sc
@@ -408,21 +410,14 @@ if __name__ == "__main__":
                     p_surplus = max(min(-house_base_load, house.ev.minmax[1]), 0)
 
                     # compute sum of all powers and scale it with p_scaler
-                    p_ev = (
-                        p_ev_min
-                        + (p_ev_max - p_surplus - p_ev_min)
-                        * (-np.cos(p_scaler) + 1)
-                        / 4
-                    )
+                    p_ev = p_ev_min + (p_ev_max - p_surplus - p_ev_min) * (-np.cos(p_scaler) + 1) / 4
                     p_ev = max(p_ev, 0)
 
                 else:
                     # compute sum of all powers and scale it with p_scaler
-                    p_ev = (
-                        p_ev_min + (p_ev_max - p_ev_min) * (-np.cos(p_scaler) + 1) / 4
-                    )
+                    p_ev = p_ev_min + (p_ev_max - p_ev_min) * (-np.cos(p_scaler) + 1) / 4
 
-                    # if p_ev is negative it can never be smaller than house_base_load
+                    # if p_ev is negative it can never be smaller than -house_base_load
                     if p_ev < 0:
                         if v2h:
                             p_ev = max(p_ev, -house_base_load, house.ev.minmax[0])

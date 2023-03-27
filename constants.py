@@ -1,26 +1,27 @@
 import logging
 import os
 import time
+import random
 
 # v2g = True:  EV can be charged and discharged
 v2g = False
-v2h = False
+v2h = True
 
 # if we use the home battery or not
-USE_FLEX_HEATING = False
-USE_HOME_BATTERY = False
-USE_FLEX_BATT_CHARGING = False
+USE_FLEX_HEATING = True
+USE_HOME_BATTERY = True
+USE_FLEX_BATT_CHARGING = True
 
 # if we use real time consumption data or not
 USE_REAL_CONS = False
 
 # for plotting consumption data of a single house
 PLOT_HOUSE = 1  # random.randint(1, 100)  # house number, starting at 1
-PLOT_DAY = 355  # random.randint(0, 364)  # day of the year, starting at 0
+PLOT_DAY = 200  # random.randint(0, 364)  # day of the year, starting at 0
 PLOT_LEN = 3  # plot duration in days
 
 # range safety constant (% of battery size)
-R_SAFETY = 1.0
+R_SAFETY = 0.7
 
 # how often we refresh the min/max scalar for the next 24 hours (in ptu's)
 # for example: 48 means we refresh every 12 hours, 24 means we refresh every 6 hours... etc
