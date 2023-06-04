@@ -1,8 +1,15 @@
 import numpy as np
 import pickle
+import logging
+
+import constants as c
+
+logger = logging.getLogger(__name__)
+logger.setLevel(c.LOG_LEVEL_DATAINIT)
+logger.addHandler(c.handler)
 
 
-class house:
+class House:
     def __init__(self, sim_length, id, baseload, pv_data, ev_data, hp_data):
         # General House Parameters
         self.id = id + 1  # give each household an ID
@@ -43,58 +50,59 @@ class house:
             self.power_max = ev_data["charge_cap"]  # kW
             self.size = ev_data["max_SoC"]  # kWh
             self.min_charge = ev_data["min_charge"]
-            self.energy = ev_data[
-                "start_SoC"
-            ]  # energy in kWh in de battery, changes each timstep
-            self.energy_history = np.zeros(
-                sim_length
-            )  # array to store previous battery state of charge for analyzing later
-            self.session = ev_data[
-                "EV_status"
-            ]  # details of the location of the EV (-1 is not at home, other number indicates the session number)
-            self.session_trip_energy = ev_data[
-                "Trip_Energy"
-            ]  # energy required during session
-            self.session_arrive = ev_data["T_arrival"]  # arrival times of session
-            self.session_leave = ev_data["T_leave"]  # leave times of session
+
+            # energy in kWh in de battery, changes each timstep
+            self.energy = ev_data["start_SoC"]
+            # array to store previous battery state of charge for analyzing later
+            self.energy_history = np.zeros(sim_length)
+            # details of the location of the EV (-1 is not at home, other number indicates the session number)
+            self.session = ev_data["EV_status"]
+            # energy required during session
+            self.session_trip_energy = ev_data["Trip_Energy"]
+            # arrival times of session
+            self.session_arrive = ev_data["T_arrival"]
+            # leave times of session
+            self.session_leave = ev_data["T_leave"]
+
+            # v2g / v2h: for now use same setting for all EVs
+            self.v2g = c.v2g
+            self.v2h = c.v2h
+            self.discharge = False
 
     class batt:
         def __init__(self, sim_length):
             # Based on Tesla Powerwall https://www.tesla.com/sites/default/files/pdfs/powerwall/Powerwall_2_AC_Datasheet_EN_NA.pdf
-            self.minmax = [0, 0, 0]
+            self.minmax = [0, 0]
             self.consumption = np.zeros(sim_length)
             self.afrr = np.zeros(sim_length)
 
             self.power_max = 5  # kW
             self.size = 13.5  # kWh
-            self.energy = 6.25  # energy in kWh in de battery at every moment in time
+            # energy in kWh in de battery at every moment in time
+            self.energy = 6.25
             self.energy_history = np.zeros(sim_length)
 
     class hp:
         def __init__(self, sim_length):
             # building properties
-            self.nominal_power = (
-                8000  # [W]       Nominal capacity of heat pump installation
-            )
-            self.minimal_relative_load = (
-                0.3  # [-]       Minimal operational capacity for heat pump to run
-            )
+            # Nominal capacity of heat pump installation
+            self.nominal_power = 8000  # [W]
+            # Minimal operational capacity for heat pump to run
+            self.minimal_relative_load = 0.3  # [-]
 
             # house tank properties
-            self.house_tank_mass = (
-                120  # [kg]      Mass of buffer = Volume of buffer (Water)
-            )
-            self.house_tank_T_min_limit = (
-                25  # [deg C]   Min temperature in the buffer tank
-            )
-            self.house_tank_T_max_limit = (
-                75  # [deg C]   Min temperature in the buffer tank
-            )
-            self.house_tank_T_set = 40  # [deg C]   Temperature setpoint in buffer tank
-            self.house_tank_T_init = 40  # [deg C]   Initial temperature in buffer tank
-            self.house_tank_T = (
-                self.house_tank_T_init
-            )  # Parameter initialized with initial temperature but changes over time
+            # Mass of buffer = Volume of buffer (Water)
+            self.house_tank_mass = 120  # [kg]
+            # Min temperature in the buffer tank
+            self.house_tank_T_min_limit = 25  # [deg C]
+            # Min temperature in the buffer tank
+            self.house_tank_T_max_limit = 75  # [deg C]
+            # Temperature setpoint in buffer tank
+            self.house_tank_T_set = 40  # [deg C]
+            # Initial temperature in buffer tank
+            self.house_tank_T_init = 40  # [deg C]
+            # Parameter initialized with initial temperature but changes over time
+            self.house_tank_T = self.house_tank_T_init
 
             self.minmax = [0, 0]
             self.consumption = np.zeros(sim_length)
@@ -124,6 +132,10 @@ def initialize(sim_length, number_of_houses):
     temperature_data = hp_data["ambient_temp"]
     ren_share = scenario_data["ren_share"]
 
+    # load day ahead prices
+    f_dh = open("day_ahead_2020.pkl", "rb")
+    day_ahead_prices = pickle.load(f_dh)["Day-ahead Price [EUR/MWh]"].values
+
     # determine distribution of data
     distribution = np.arange(number_of_houses)
     np.random.shuffle(distribution)
@@ -132,7 +144,7 @@ def initialize(sim_length, number_of_houses):
     list_of_houses = []
     for nmb in range(number_of_houses):
         list_of_houses.append(
-            house(
+            House(
                 sim_length,
                 nmb,
                 baseloads[distribution[nmb]],
@@ -142,4 +154,4 @@ def initialize(sim_length, number_of_houses):
             )
         )
 
-    return [list_of_houses, ren_share, temperature_data]
+    return [list_of_houses, ren_share, temperature_data, day_ahead_prices]
